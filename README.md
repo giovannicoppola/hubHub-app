@@ -6,6 +6,13 @@ SwiftUI companion to the [alfred-hubHub](https://github.com/giovannicoppola/alfr
 workflow: the same downloads / issues / stars / forks / watchers for every repo you own, with
 the same day-over-day deltas, on the phone.
 
+<p align="center">
+  <img src="docs/screenshots/01-repos.png" width="24%" alt="Repository list">
+  <img src="docs/screenshots/02-chart-downloads.png" width="24%" alt="Download history chart">
+  <img src="docs/screenshots/05-issues.png" width="24%" alt="Issues tab">
+  <img src="docs/screenshots/06-settings.png" width="24%" alt="Settings">
+</p>
+
 ## What it does
 
 - **Repos** — every repo with the counts you chose to see, each showing its change since the
@@ -163,6 +170,34 @@ give the charts something to draw before the Action has run for a week.
 
 That is the whole setup in **This phone** mode. For **GitHub Action** mode, switch Source first
 and confirm owner / repo / paths — by default `giovannicoppola/gitVault` on `main`.
+
+## Screenshots
+
+`docs/screenshots/` is generated from the running app, not captured by hand, so it cannot drift
+from what the app actually does:
+
+```bash
+# 1. Seed the simulator. Use a PUBLIC-ONLY history — these images go in a public
+#    README, and /user/repos lists private repositories too.
+python3 scripts/seed-simulator.py --history /path/to/public-only-history.json
+
+# 2. Drive the app to each screen
+TEST_RUNNER_HUBHUB_SHOTS=1 xcodebuild -project HubHub.xcodeproj -scheme HubHub \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  -resultBundlePath /tmp/shots.xcresult \
+  -only-testing:HubHubUITests/ScreenshotTests test
+
+# 3. Name and downscale them
+python3 scripts/export-screenshots.py /tmp/shots.xcresult docs/screenshots
+```
+
+`TEST_RUNNER_` is not decoration: a UI test runs in its own process on the simulator and does
+not inherit the shell's environment, so the prefix is how the flag reaches it. Without
+`HUBHUB_SHOTS=1` the capture skips, and a normal test run does not pay for it.
+
+To build the public-only history, filter the full one to repos that are not private, and check
+the result before shooting — `xcrun simctl ui <device> appearance light` first, since the images
+sit on a white README.
 
 ## Notes
 

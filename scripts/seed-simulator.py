@@ -97,12 +97,14 @@ def main() -> int:
 
     # Direct mode — the default — keeps one LocalHistory file instead, with the
     # counts under their Swift names rather than the workflow's my-prefixed ones.
+    # Counts are sparse: snapshots from before the workflow tracked all five
+    # carry only downloads, and a missing metric has to stay missing.
     metrics = {"downloads": "myDownloads", "issues": "myIssues", "stars": "myStars",
                "forks": "myForks", "watchers": "myWatchers"}
     snapshot_stats.write_json(os.path.join(target, "history.json"), {
         "snapshots": {
             date: {
-                name: {key: stats[source] for key, source in metrics.items()}
+                name: {key: stats[source] for key, source in metrics.items() if source in stats}
                 for name, stats in snapshot.items()
             }
             for date, snapshot in history.items() if date != "RepoURLs"
