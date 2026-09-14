@@ -1,0 +1,218 @@
+import SwiftUI
+
+struct RepoListView: View {
+    enum Mode {
+        /// Every repo, with the sort and "changed only" controls.
+        case all
+        /// Only repos with open issues, most first — the workflow's `--i` tag,
+        /// where tapping a row goes to the issues page rather than the repo.
+        case issues
+
+        var title: String { self == .all ? "hubHub" : "Issues" }
+    }
+
+    let mode: Mode
+    @EnvironmentObject private var store: StatsStore
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !rows.isEmpty {
+                    Section {
+                        ForEach(rows) { repo in
+                            NavigationLink(value: repo) {
+                                RepoRow(repo: repo, emphasise: mode == .issues ? .issues : nil)
+                            }
+                            .accessibilityIdentifier("repoRow")
+                        }
+                    } header: {
+                        Text(store.provenance)
+                            .textCase(nil)
+                    } footer: {
+                        Text(footer)
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label(emptyTitle, systemImage: emptySymbol)
+                    } description: {
+                        Text(emptyMessage)
+                    } actions: {
+                        if store.latest.repos.isEmpty, store.hasToken {
+                            Button("Run snapshot now") { Task { await store.runSnapshot() } }
+                        } else if store.changedOnly, mode == .all {
+                            Button("Show all repos") { store.setChangedOnly(false) }
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(mode.title)
+            .navigationDestination(for: RepoStats.self) { RepoDetailView(repo: $0) }
+            .searchable(text: $store.search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter repos")
+            .refreshable { await store.refresh(force: true) }
+            .toolbar { toolbar }
+        }
+    }
+
+    private var rows: [RepoStats] {
+        mode == .all ? store.repos : store.issueQueue
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                if mode == .all {
+                    Picker("Sort by", selection: Binding(get: { store.sort }, set: store.setSort)) {
+                        ForEach(SortOrder.allCases) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                    Divider()
+                    Toggle(isOn: Binding(get: { store.changedOnly }, set: store.setChangedOnly)) {
+                        Label("Changed only (\(store.changedCount))", systemImage: "arrow.up.arrow.down")
+                    }
+                    Divider()
+                    Menu("Show counts") {
+                        ForEach(Metric.allCases) { metric in
+                            Button {
+                                store.toggleMetric(metric)
+                            } label: {
+                                Label(
+                                    metric.label,
+                                    systemImage: store.visibleMetrics.contains(metric) ? "checkmark" : ""
+                                )
+                            }
+                        }
+                    }
+                    Divider()
+                }
+                Button {
+                    Task { await store.runSnapshot() }
+                } label: {
+                    Label("Refresh from GitHub", systemImage: "arrow.clockwise")
+                }
+                .disabled(!store.hasToken || store.status.isBusy)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+    }
+
+    private var footer: String {
+        let shown = rows.count
+        let total = mode == .all ? store.latest.repos.count : store.latest.repos.filter { $0.issues > 0 }.count
+        let counted = shown == total ? "\(total) repos" : "\(shown) of \(total) repos"
+        if mode == .issues {
+            return "\(counted) · \(store.totals.issues) open issues"
+        }
+        return "\(counted) · \(store.totals.downloads.grouped) downloads · \(store.totals.stars.grouped) stars"
+    }
+
+    private var emptyTitle: String {
+        if store.latest.repos.isEmpty { return "No stats yet" }
+        if mode == .issues { return "No open issues" }
+        if store.changedOnly { return "Nothing changed" }
+        return "No matches"
+    }
+
+    private var emptySymbol: String {
+        if store.latest.repos.isEmpty { return "icloud.slash" }
+        if mode == .issues { return "checkmark.circle" }
+        return "magnifyingglass"
+    }
+
+    private var emptyMessage: String {
+        if store.latest.repos.isEmpty {
+            return store.hasToken
+                ? "Run the snapshot Action to collect your first set of counts."
+                : "Pull to load \(store.config.owner)/\(store.config.repo), or add a token in Settings to run the Action."
+        }
+        if mode == .issues { return "Nothing is open across your repositories." }
+        if store.changedOnly { return "No counts moved between \(store.latest.previous) and \(store.latest.current)." }
+        return "No repository matches “\(store.search)”."
+    }
+}
+
+/// One repo: name, then a wrapping row of the counts you asked to see, each
+/// with its change since the previous snapshot.
+struct RepoRow: View {
+    let repo: RepoStats
+    /// Pulled to the front and coloured, for the Issues tab.
+    var emphasise: Metric?
+
+    @EnvironmentObject private var store: StatsStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(repo.name)
+                .font(.body.weight(.medium))
+                .lineLimit(1)
+
+            FlowLayout(spacing: 8) {
+                ForEach(metrics) { metric in
+                    MetricChip(
+                        metric: metric,
+                        value: repo.value(metric),
+                        delta: repo.delta(metric),
+                        prominent: metric == emphasise
+                    )
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var metrics: [Metric] {
+        // The Issues tab always shows the issue count, whatever the Settings
+        // toggles say — hiding it there would empty the tab of its point.
+        var wanted = Metric.allCases.filter { store.visibleMetrics.contains($0) }
+        if let emphasise {
+            wanted.removeAll { $0 == emphasise }
+            wanted.insert(emphasise, at: 0)
+        }
+        return wanted
+    }
+}
+
+struct MetricChip: View {
+    let metric: Metric
+    let value: Int
+    let delta: Int?
+    var prominent = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(metric.emoji)
+                .font(.caption2)
+                // A repo with no forks and no watchers shows three zero chips;
+                // fading them keeps the counts that matter readable.
+                .opacity(value == 0 && !prominent ? 0.45 : 1)
+            Text(value.grouped)
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(prominent ? Color.primary : .secondary)
+                .opacity(value == 0 && !prominent ? 0.55 : 1)
+            if let delta, let text = delta.signedDelta {
+                Text(text)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(metric.deltaColor(delta))
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(prominent ? Color.orange.opacity(0.15) : Color.secondary.opacity(0.10))
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        var text = "\(metric.label): \(value.grouped)"
+        if let delta, delta != 0 {
+            text += ", \(delta > 0 ? "up" : "down") \(abs(delta).grouped)"
+        }
+        return text
+    }
+}
