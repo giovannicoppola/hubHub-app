@@ -9,3 +9,7 @@ xcuserdata/
 .env
 *.pem
 build/
+
+# Python
+__pycache__/
+*.pyc
