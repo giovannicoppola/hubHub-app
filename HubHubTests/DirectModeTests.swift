@@ -325,30 +325,6 @@ final class LocalHistoryTests: XCTestCase {
         XCTAssertEqual(series.points(repo: "beta", metric: .downloads).count, 1)
     }
 
-    /// Daily for a year, then one a month — otherwise a phone that has run for
-    /// years carries a history it never charts.
-    func testPruningKeepsAYearDailyThenOneAMonth() {
-        var history = LocalHistory.empty
-        let now = StatsSeries.dateParser.date(from: "2026-09-14")!
-        let calendar = Calendar.current
-        for back in stride(from: 900, through: 0, by: -1) {
-            let day = calendar.date(byAdding: .day, value: -back, to: now)!
-            history.snapshots[StatsSeries.dateParser.string(from: day)] =
-                ["alpha": Counts(downloads: 900 - back, issues: 0, stars: 0, forks: 0, watchers: 0)]
-        }
-
-        history.prune(asOf: now)
-
-        let kept = history.dates
-        XCTAssertEqual(kept.last, "2026-09-14")
-        // 366 recent days, plus one per month for the ~18 months before that.
-        XCTAssertGreaterThan(kept.count, 366)
-        XCTAssertLessThan(kept.count, 400)
-
-        let old = kept.filter { $0 < "2025-09-14" }
-        XCTAssertEqual(Set(old.map { $0.prefix(7) }).count, old.count, "at most one snapshot per old month")
-    }
-
     func testSurvivesARoundTripThroughJSON() throws {
         var history = LocalHistory.empty
         history.record(snapshot(100), on: "2026-09-13")
@@ -532,5 +508,134 @@ final class DirectModeStoreTests: XCTestCase {
 
         store.setSource(.direct)
         XCTAssertEqual(store.latest.repos.count, 1, "the local history comes back")
+    }
+}
+
+
+/// Importing the Alfred workflow's own history file.
+final class AlfredImportTests: XCTestCase {
+    /// The real file's shape: dates → repo → my-prefixed counts, plus RepoURLs.
+    /// Pre-2022-12 snapshots carry only myDownloads, which is the whole reason
+    /// the history stores counts sparsely.
+    private let alfred: [String: Any] = [
+        "2022-05-04": ["alpha": ["myDownloads": 71]],
+        "2022-06-01": ["alpha": ["myDownloads": 100]],
+        "2022-12-01": ["alpha": ["myDownloads": 321, "myIssues": 1, "myStars": 25, "myForks": 2, "myWatchers": 3]],
+        "RepoURLs": ["alpha": "https://github.com/octocat/alpha"],
+    ]
+
+    func testImportsEveryDatedSnapshot() throws {
+        var history = LocalHistory.empty
+        let summary = try history.merge(alfred: alfred)
+
+        XCTAssertEqual(summary.added, 3)
+        XCTAssertEqual(history.dates, ["2022-05-04", "2022-06-01", "2022-12-01"])
+        XCTAssertEqual(history.repoURLs["alpha"], "https://github.com/octocat/alpha")
+    }
+
+    /// The point of the sparse storage: downloads exist from May, stars do not,
+    /// and the chart must show a gap rather than a star count of 0 that jumps.
+    func testDownloadsOnlySnapshotsKeepStarsUnknown() throws {
+        var history = LocalHistory.empty
+        _ = try history.merge(alfred: alfred)
+
+        let series = history.series(asOf: StatsSeries.dateParser.date(from: "2022-12-02")!)
+        XCTAssertEqual(series.repos["alpha"]?["downloads"] ?? [], [71, 100, 321])
+        XCTAssertEqual(series.repos["alpha"]?["stars"] ?? [], [nil, nil, 25])
+
+        XCTAssertEqual(series.points(repo: "alpha", metric: .downloads).count, 3)
+        XCTAssertEqual(series.points(repo: "alpha", metric: .stars).count, 1, "stars start when they were first tracked")
+    }
+
+    func testImportingTwiceChangesNothing() throws {
+        var history = LocalHistory.empty
+        _ = try history.merge(alfred: alfred)
+        let after = history
+
+        let summary = try history.merge(alfred: alfred)
+
+        XCTAssertEqual(summary.added, 0)
+        XCTAssertEqual(summary.filled, 0)
+        XCTAssertEqual(history, after)
+    }
+
+    /// A snapshot the app already collected wins; the import only fills gaps.
+    func testCollectedSnapshotsAreNotOverwritten() throws {
+        var history = LocalHistory.empty
+        history.record(
+            Snapshot(
+                counts: ["alpha": Counts(downloads: 999, issues: 0, stars: 0, forks: 0, watchers: 0)],
+                urls: ["alpha": "https://github.com/octocat/alpha"],
+                owner: "octocat",
+                skipped: []
+            ),
+            on: "2022-12-01"
+        )
+
+        _ = try history.merge(alfred: alfred)
+
+        XCTAssertEqual(history.snapshots["2022-12-01"]?["alpha"]?["downloads"], 999, "the app's own snapshot stands")
+        XCTAssertEqual(history.snapshots["2022-05-04"]?["alpha"]?["downloads"], 71, "older dates still imported")
+    }
+
+    /// The import fills a date the app has, when it knows repos the app missed.
+    func testImportFillsMissingReposOnASharedDate() throws {
+        var history = LocalHistory.empty
+        history.record(
+            Snapshot(
+                counts: ["beta": Counts(downloads: 5, issues: 0, stars: 0, forks: 0, watchers: 0)],
+                urls: [:], owner: "octocat", skipped: []
+            ),
+            on: "2022-12-01"
+        )
+
+        let summary = try history.merge(alfred: alfred)
+
+        XCTAssertEqual(summary.filled, 1)
+        XCTAssertEqual(history.snapshots["2022-12-01"]?.count, 2)
+        XCTAssertEqual(history.snapshots["2022-12-01"]?["alpha"]?["stars"], 25)
+    }
+
+    /// Early workflow versions stored a bare integer per repo, which cannot be
+    /// attributed to a metric.
+    func testRowsThatAreNotCountsAreSkippedNotGuessed() throws {
+        var history = LocalHistory.empty
+        _ = try history.merge(alfred: [
+            "2022-05-04": ["alpha": 71, "beta": ["myDownloads": 3]],
+        ])
+
+        XCTAssertNil(history.snapshots["2022-05-04"]?["alpha"])
+        XCTAssertEqual(history.snapshots["2022-05-04"]?["beta"]?["downloads"], 3)
+    }
+
+    func testAFileWithNoSnapshotsIsRejected() {
+        var history = LocalHistory.empty
+        XCTAssertThrowsError(try history.merge(alfred: ["hello": "world"])) { error in
+            XCTAssertEqual(error as? LocalHistory.ImportError, .notAHistoryFile)
+        }
+    }
+
+    /// A four-year import charts at monthly resolution beyond the last year,
+    /// while every snapshot is still kept.
+    func testLongHistoryIsThinnedForChartingButNotDiscarded() throws {
+        var history = LocalHistory.empty
+        let now = StatsSeries.dateParser.date(from: "2026-09-14")!
+        let calendar = Calendar.current
+        var payload: [String: Any] = [:]
+        for back in stride(from: 1600, through: 0, by: -1) {
+            let day = calendar.date(byAdding: .day, value: -back, to: now)!
+            payload[StatsSeries.dateParser.string(from: day)] = ["alpha": ["myDownloads": 1600 - back]]
+        }
+        _ = try history.merge(alfred: payload)
+
+        XCTAssertEqual(history.dates.count, 1601, "every snapshot is kept")
+
+        let charted = history.series(asOf: now).dates
+        XCTAssertLessThan(charted.count, 450, "but the chart is thinned")
+        XCTAssertGreaterThan(charted.count, 365)
+        XCTAssertEqual(charted.last, "2026-09-14")
+
+        let old = charted.filter { $0 < "2025-09-14" }
+        XCTAssertEqual(Set(old.map { $0.prefix(7) }).count, old.count, "one point per month before the daily window")
     }
 }

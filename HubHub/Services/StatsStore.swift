@@ -257,6 +257,39 @@ final class StatsStore: ObservableObject {
         return saved
     }
 
+    /// Fold an Alfred `myGitHistory.json` into the local history.
+    ///
+    /// Direct mode only — in sync mode the Action's repo owns the history, and
+    /// `import_alfred_history.py` does the same job there.
+    @discardableResult
+    func importAlfredHistory(from url: URL) -> String {
+        guard source == .direct else {
+            return "Switch Source to “This phone” first — in Action mode the repo owns the history."
+        }
+
+        // A file handed over by the document picker lives outside the sandbox.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        do {
+            let data = try Data(contentsOf: url)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw LocalHistory.ImportError.notAHistoryFile
+            }
+            let summary = try history.merge(alfred: json)
+            guard summary.added + summary.filled > 0 else { return summary.description }
+
+            latest = history.latest()
+            series = history.series()
+            writeHistoryCache()
+            return summary.description
+        } catch {
+            let message = message(for: error)
+            status = .failed(message)
+            return message
+        }
+    }
+
     func dismissError() {
         if case .failed = status { status = .idle }
     }

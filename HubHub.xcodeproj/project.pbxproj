@@ -20,6 +20,7 @@
 		8151E7F02743AF36E7C0951D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0170934113AFF8889C76A77F /* Assets.xcassets */; };
 		9A1C2ABDF54960316E6F2B39 /* StatsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B3512A95BCD55EFB0EF66D /* StatsStore.swift */; };
 		A298BCD114610FC6D8DA07F9 /* StatsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5FA07FDDC135569E4C746BE /* StatsModelTests.swift */; };
+		A58C94667F587081564B62E3 /* RealAlfredHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9F52735A07B55A043587C6 /* RealAlfredHistoryTests.swift */; };
 		C4CCF148F92D133B6DBBAA88 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50CF91F16CB70A8BE68AF697 /* ContentView.swift */; };
 		C74D2757E6A3CE9DDEC08AFD /* StatsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E36D3E5E9D06D55FCBAC2AB /* StatsCollector.swift */; };
 		CDB1C5C7E8F52785E935A12D /* StatsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D8C5F18D35FCB2AC877928 /* StatsModels.swift */; };
@@ -59,6 +60,7 @@
 		49BAAD456238290A55E011EE /* HubHubUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HubHubUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A00CF614732694449797D1A /* RepoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoDetailView.swift; sourceTree = "<group>"; };
 		50CF91F16CB70A8BE68AF697 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		7C9F52735A07B55A043587C6 /* RealAlfredHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealAlfredHistoryTests.swift; sourceTree = "<group>"; };
 		91DD1DC3E9BCA89ED3BB3469 /* DirectModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectModeTests.swift; sourceTree = "<group>"; };
 		945CB8F2D765F3AB8D8DFD39 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A4E3E9E4F02225B229DF4197 /* HubHubTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HubHubTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				91DD1DC3E9BCA89ED3BB3469 /* DirectModeTests.swift */,
+				7C9F52735A07B55A043587C6 /* RealAlfredHistoryTests.swift */,
 				C5FA07FDDC135569E4C746BE /* StatsModelTests.swift */,
 				2A9BCB2653FAA96083CA666B /* StatsStoreTests.swift */,
 			);
@@ -281,6 +284,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				17F018E0F852956EA7048BC0 /* DirectModeTests.swift in Sources */,
+				A58C94667F587081564B62E3 /* RealAlfredHistoryTests.swift in Sources */,
 				A298BCD114610FC6D8DA07F9 /* StatsModelTests.swift in Sources */,
 				34984B8105F6BCA56AEF167B /* StatsStoreTests.swift in Sources */,
 			);

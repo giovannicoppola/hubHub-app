@@ -53,6 +53,34 @@ never downloaded by the app.
 repositories too — 47 of them here — so publishing the counts would publish their names. The
 counts are harmless; the repo list is not.
 
+### Importing your Alfred history
+
+The `alfred-hubHub` workflow has been writing a snapshot to its cache folder every time it ran,
+in the same shape this app uses. Both modes can fold that in, so the charts start with years in
+them instead of one point:
+
+- **This phone** — copy `myGitHistory.json` to the phone (AirDrop, or iCloud Drive), then
+  **Settings → History → Import Alfred history…**
+- **GitHub Action** — run `import_alfred_history.py` in the data repo, then regenerate
+
+```bash
+# on the Mac, in gitVault-notes/hubhub/
+python3 import_alfred_history.py --dry-run   # says what it would add
+python3 import_alfred_history.py
+python3 snapshot_stats.py                    # regenerate latest + series
+```
+
+The workflow's file lives at:
+
+```
+~/Library/Caches/com.runningwithcrayons.Alfred/Workflow Data/alfred-hubhub/myGitHistory.json
+```
+
+It is a union, not a conversion — existing snapshots win, so importing twice changes nothing.
+Snapshots from before the workflow tracked all five counts carry only downloads; those stay
+partial rather than being padded with zeros, so a star chart begins when stars were first
+recorded instead of "starting at 0" and jumping.
+
 ### Either way
 
 - **Offline first.** The last snapshot is cached on the phone. A failed refresh shows an error
@@ -67,6 +95,9 @@ counts are harmless; the repo list is not.
   systemic, and writing it to history would corrupt every delta after it.
 - **The two modes keep separate histories**, so switching never shows one mode's numbers under
   the other's snapshot dates.
+- **Every snapshot is kept; only the chart is thinned** — daily detail for a year, then one
+  point a month. Retention shapes what is plotted, not what is stored, so importing a four-year
+  archive does not quietly destroy three years of it.
 
 ## Requirements
 
@@ -105,8 +136,13 @@ xcodebuild -project HubHub.xcodeproj -scheme HubHub \
 `HubHubTests` covers decoding both data files, delta and "changed" logic, every sort and filter,
 series gaps, the local history (recording, pruning, JSON round-trip), the collector against a
 fake GitHub (pagination, every-asset download totals, `subscribers_count` vs the stars alias,
-progress, skipped repos, the abort threshold), and the store end to end in both modes — offline
+progress, skipped repos, the abort threshold), the Alfred import (partial snapshots, idempotence,
+not overwriting collected data, chart thinning), and the store end to end in both modes — offline
 cache, missing files, malformed responses, mode switching and the persisted preferences.
+
+`RealAlfredHistoryTests` runs the importer against the actual workflow cache on this Mac and
+skips when it is not there, the way the renovation app's `ReportParityTests` runs against the
+real vault.
 
 `HubHubUITests` drives the real app: drilling into a repo draws its chart, the Issues tab really
 drops repos with no open issues, search narrows the list. They skip when the simulator has no

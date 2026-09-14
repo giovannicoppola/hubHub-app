@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var store: StatsStore
@@ -8,6 +9,8 @@ struct SettingsView: View {
     /// A pasted token never triggers Return, and the keyboard covers the tab
     /// bar — without a way to dismiss it there is no way off this screen.
     @FocusState private var editing: Bool
+    @State private var importing = false
+    @State private var importResult: String?
 
     var body: some View {
         NavigationStack {
@@ -52,6 +55,25 @@ struct SettingsView: View {
                     Text("Refresh")
                 } footer: {
                     Text(refreshFooter)
+                }
+
+                if store.source == .direct {
+                    Section {
+                        Button {
+                            importing = true
+                        } label: {
+                            Label("Import Alfred history…", systemImage: "square.and.arrow.down")
+                        }
+                        if let importResult {
+                            Text(importResult)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("History")
+                    } footer: {
+                        Text("If you have used the alfred-hubHub workflow, it has been saving a snapshot every time it ran. Copy its myGitHistory.json to this phone (AirDrop or iCloud Drive) and pick it here to chart all of it. Importing twice changes nothing.")
+                    }
                 }
 
                 Section("Show counts") {
@@ -183,6 +205,14 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+                switch result {
+                case .success(let url):
+                    importResult = store.importAlfredHistory(from: url)
+                case .failure(let error):
+                    importResult = error.localizedDescription
+                }
+            }
             // Three ways off the keyboard: a Done button above it, a swipe down
             // the form, and Return.
             .scrollDismissesKeyboard(.interactively)
