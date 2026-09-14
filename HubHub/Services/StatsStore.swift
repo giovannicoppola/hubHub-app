@@ -100,6 +100,8 @@ final class StatsStore: ObservableObject {
 
     private var cachedToken: String?
     private var lastLatestFetch: Date?
+    /// The `generatedAt` of the stats file the cached series was built from.
+    private var seriesStamp: String?
     /// Direct mode's history. Empty in sync mode, where the Action owns it.
     private var history: LocalHistory = .empty
 
@@ -114,6 +116,7 @@ final class StatsStore: ObservableObject {
         static let changedOnlyOnLaunch = "changed_only_on_launch"
         static let lastFetch = "last_latest_fetch"
         static let source = "data_source"
+        static let seriesStamp = "series_stamp"
     }
 
     // MARK: - Init
@@ -156,6 +159,7 @@ final class StatsStore: ObservableObject {
         self.changedOnlyOnLaunch = defaults.bool(forKey: DefaultsKey.changedOnlyOnLaunch)
         self.changedOnly = self.changedOnlyOnLaunch
         self.lastLatestFetch = defaults.object(forKey: DefaultsKey.lastFetch) as? Date
+        self.seriesStamp = defaults.string(forKey: DefaultsKey.seriesStamp)
 
         self.cachedToken = KeychainHelper.load(account: tokenAccount)
         self.hasToken = !(cachedToken ?? "").isEmpty
@@ -352,8 +356,11 @@ final class StatsStore: ObservableObject {
             defaults.set(lastLatestFetch, forKey: DefaultsKey.lastFetch)
             writeCache(text, to: "latest.json")
             status = .idle
-            // The chart data on disk is now a snapshot behind.
-            if !series.dates.isEmpty, series.dates.last != decoded.current {
+            // Refetch the charts whenever the stats file was regenerated —
+            // not just when its newest date changes. Importing four years of
+            // history rewrites the series while today's date stays today's
+            // date, and comparing dates alone would never notice.
+            if !series.dates.isEmpty, seriesStamp != decoded.generatedAt {
                 await loadSeries(force: true)
             }
         } catch {
@@ -372,6 +379,8 @@ final class StatsStore: ObservableObject {
         do {
             let text = try await github.fetchText(config: config, path: config.seriesPath, token: cachedToken ?? "")
             series = try decode(StatsSeries.self, from: text, describing: "the history file")
+            seriesStamp = latest.generatedAt
+            defaults.set(seriesStamp, forKey: DefaultsKey.seriesStamp)
             writeCache(text, to: "series.json")
         } catch {
             // A missing history file must not blank out a working list — the

@@ -205,6 +205,34 @@ final class StatsStoreTests: XCTestCase {
         XCTAssertTrue(store.provenance.contains("no earlier snapshot"), store.provenance)
     }
 
+    /// Importing years of history rewrites the series while its newest date
+    /// stays today's date. Comparing dates alone would never refetch it, and
+    /// the phone would sit on a one-point chart for good.
+    func testSeriesIsRefetchedWhenTheStatsFileIsRegenerated() async {
+        let oneDate = #"{"dates":["2026-09-14"],"repos":{"AlfreDo":{"downloads":[3294],"issues":[0],"stars":[93],"forks":[4],"watchers":[4]}}}"#
+        StubURLProtocol.routes = [
+            ("github-stats-latest.json", 200, Fixtures.latestJSON),
+            ("github-stats-series.json", 200, oneDate),
+        ]
+        let store = makeStore()
+        await store.refresh(force: true)
+        await store.loadSeries()
+        XCTAssertEqual(store.series.dates.count, 1)
+
+        // Same newest date, far more history behind it, and a new generatedAt.
+        let regenerated = Fixtures.latestJSON.replacingOccurrences(
+            of: #""generatedAt": "2026-09-14T06:22:11Z""#,
+            with: #""generatedAt": "2026-09-14T15:40:00Z""#
+        )
+        StubURLProtocol.routes = [
+            ("github-stats-latest.json", 200, regenerated),
+            ("github-stats-series.json", 200, Fixtures.seriesJSON),
+        ]
+        await store.refresh(force: true)
+
+        XCTAssertEqual(store.series.dates.count, 3, "the rewritten series should have been refetched")
+    }
+
     func testSeriesIsFetchedSeparatelyFromTheList() async {
         StubURLProtocol.routes = [
             ("github-stats-latest.json", 200, Fixtures.latestJSON),
