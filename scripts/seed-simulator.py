@@ -90,8 +90,26 @@ def main() -> int:
 
     target = os.path.join(container(args.device), "Library", "Application Support", "HubHub")
     owner = next(iter(urls.values()), "https://github.com/giovannicoppola/x").split("/")[3]
+
+    # Sync mode reads these two.
     snapshot_stats.write_json(os.path.join(target, "latest.json"), snapshot_stats.build_latest(history, urls, owner))
     snapshot_stats.write_json(os.path.join(target, "series.json"), snapshot_stats.build_series(history), compact=True)
+
+    # Direct mode — the default — keeps one LocalHistory file instead, with the
+    # counts under their Swift names rather than the workflow's my-prefixed ones.
+    metrics = {"downloads": "myDownloads", "issues": "myIssues", "stars": "myStars",
+               "forks": "myForks", "watchers": "myWatchers"}
+    snapshot_stats.write_json(os.path.join(target, "history.json"), {
+        "snapshots": {
+            date: {
+                name: {key: stats[source] for key, source in metrics.items()}
+                for name, stats in snapshot.items()
+            }
+            for date, snapshot in history.items() if date != "RepoURLs"
+        },
+        "repoURLs": urls,
+        "owner": owner,
+    })
 
     snapshots = len(history) - 1
     print(f"Seeded {snapshots} snapshot{'s' if snapshots != 1 else ''} into {target}")

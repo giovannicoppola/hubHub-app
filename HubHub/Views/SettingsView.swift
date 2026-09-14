@@ -13,19 +13,41 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Button {
-                        Task { await store.runSnapshot() }
-                    } label: {
-                        Label("Run snapshot Action now", systemImage: "arrow.clockwise")
+                    Picker("Counts come from", selection: Binding(get: { store.source }, set: store.setSource)) {
+                        ForEach(DataSource.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
                     }
-                    .disabled(!store.hasToken || store.status.isBusy)
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Source")
+                } footer: {
+                    Text(store.source.explanation)
+                }
 
+                Section {
                     Button {
                         Task { await store.refresh(force: true) }
                     } label: {
-                        Label("Reload stats file", systemImage: "arrow.down.circle")
+                        Label(
+                            store.source == .direct ? "Read the counts now" : "Reload stats file",
+                            systemImage: "arrow.clockwise"
+                        )
                     }
-                    .disabled(store.status.isBusy)
+                    .disabled(store.status.isBusy || (store.source == .direct && !store.hasToken))
+
+                    if store.source == .sync {
+                        Button {
+                            Task { await store.runSnapshot() }
+                        } label: {
+                            Label("Run snapshot Action now", systemImage: "bolt")
+                        }
+                        .disabled(!store.hasToken || store.status.isBusy)
+                    }
+
+                    if let fraction = store.status.fraction {
+                        ProgressView(value: fraction)
+                    }
                 } header: {
                     Text("Refresh")
                 } footer: {
@@ -62,6 +84,7 @@ struct SettingsView: View {
                     Text("Matches the workflow's ⌥ preferences: which counts appear, how repos are ordered, and whether launching filters down to what moved.")
                 }
 
+                if store.source == .sync {
                 Section {
                     TextField("Owner", text: $store.config.owner)
                         .focused($editing)
@@ -93,6 +116,7 @@ struct SettingsView: View {
                     Text("Data repository")
                 } footer: {
                     Text("The repo whose Action writes the stats files — not the repos being measured.")
+                }
                 }
 
                 Section {
@@ -136,7 +160,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Access token")
                 } footer: {
-                    Text("Only needed to run the Action from the phone, and to read a private data repo. Fine-grained: Contents Read and Actions Read and Write on \(store.config.owner)/\(store.config.repo). Classic: repo + workflow. Stored on this device only, in the Keychain.")
+                    Text(tokenFooter)
                 }
 
                 Section("Snapshot") {
@@ -146,7 +170,14 @@ struct SettingsView: View {
                     LabeledContent("Stars", value: store.totals.stars.grouped)
                     LabeledContent("Taken", value: store.latest.current.isEmpty ? "—" : store.latest.current)
                     LabeledContent("Compared to", value: store.latest.previous.isEmpty ? "—" : store.latest.previous)
-                    if let url = URL(string: "https://github.com/\(store.config.owner)/\(store.config.repo)/actions/workflows/\(store.config.workflowFile)") {
+                    if !store.skipped.isEmpty {
+                        LabeledContent("Could not read", value: "\(store.skipped.count)")
+                        Text(store.skipped.joined(separator: ", "))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if store.source == .sync,
+                       let url = URL(string: "https://github.com/\(store.config.owner)/\(store.config.repo)/actions/workflows/\(store.config.workflowFile)") {
                         Link("Action history on GitHub", destination: url)
                     }
                 }
@@ -167,12 +198,24 @@ struct SettingsView: View {
 
     private var refreshFooter: String {
         var lines = [store.provenance]
-        if store.isStale {
+        if store.isStale, store.source == .sync {
             lines.append("That is more than a day old — the scheduled Action may not have run.")
         }
         if !store.hasToken {
-            lines.append("Add a token below to run the Action from here.")
+            lines.append("Add a token below first.")
+        }
+        if store.source == .direct {
+            lines.append("Two requests per repo, so this takes a few seconds.")
         }
         return lines.joined(separator: " ")
+    }
+
+    private var tokenFooter: String {
+        switch store.source {
+        case .direct:
+            return "Needs to read your repositories. Fine-grained: Contents Read on all repositories, or Classic: repo. Stored on this device only, in the Keychain, and sent to nowhere but github.com."
+        case .sync:
+            return "Needs to read the data repo and run its Action. Fine-grained: Contents Read and Actions Read and Write on \(store.config.owner)/\(store.config.repo). Classic: repo + workflow. Stored on this device only, in the Keychain."
+        }
     }
 }

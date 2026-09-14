@@ -63,7 +63,13 @@ struct SyncBar: View {
             }
         } else if let message = store.status.progressMessage {
             bar {
-                ProgressView().controlSize(.small)
+                if let fraction = store.status.fraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

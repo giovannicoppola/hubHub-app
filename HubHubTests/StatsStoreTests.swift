@@ -61,16 +61,22 @@ final class StatsStoreTests: XCTestCase {
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
+        KeychainHelper.delete(account: suiteName)
         try? FileManager.default.removeItem(at: cacheDirectory)
         StubURLProtocol.reset()
         try await super.tearDown()
     }
 
-    private func makeStore() -> StatsStore {
-        StatsStore(
+    /// These cover sync mode, which is no longer the default — a fresh install
+    /// collects on the phone instead — so it has to be asked for explicitly.
+    private func makeStore(source: DataSource = .sync) -> StatsStore {
+        defaults.set(source.rawValue, forKey: "data_source")
+        return StatsStore(
             github: GitHubService(session: StubURLProtocol.session()),
+            collector: StatsCollector(session: StubURLProtocol.session()),
             defaults: defaults,
-            cacheDirectory: cacheDirectory
+            cacheDirectory: cacheDirectory,
+            tokenAccount: suiteName
         )
     }
 

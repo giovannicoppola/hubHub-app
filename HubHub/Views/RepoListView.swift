@@ -38,7 +38,7 @@ struct RepoListView: View {
                         Text(emptyMessage)
                     } actions: {
                         if store.latest.repos.isEmpty, store.hasToken {
-                            Button("Run snapshot now") { Task { await store.runSnapshot() } }
+                            Button("Read the counts now") { Task { await store.refresh(force: true) } }
                         } else if store.changedOnly, mode == .all {
                             Button("Show all repos") { store.setChangedOnly(false) }
                         }
@@ -88,9 +88,12 @@ struct RepoListView: View {
                     Divider()
                 }
                 Button {
-                    Task { await store.runSnapshot() }
+                    Task { await store.refresh(force: true) }
                 } label: {
-                    Label("Refresh from GitHub", systemImage: "arrow.clockwise")
+                    Label(
+                        store.source == .direct ? "Read the counts now" : "Refresh from GitHub",
+                        systemImage: "arrow.clockwise"
+                    )
                 }
                 .disabled(!store.hasToken || store.status.isBusy)
             } label: {
@@ -103,10 +106,14 @@ struct RepoListView: View {
         let shown = rows.count
         let total = mode == .all ? store.latest.repos.count : store.latest.repos.filter { $0.issues > 0 }.count
         let counted = shown == total ? "\(total) repos" : "\(shown) of \(total) repos"
-        if mode == .issues {
-            return "\(counted) · \(store.totals.issues) open issues"
+        var line = mode == .issues
+            ? "\(counted) · \(store.totals.issues) open issues"
+            : "\(counted) · \(store.totals.downloads.grouped) downloads · \(store.totals.stars.grouped) stars"
+        // Fewer rows than usual should never be silent.
+        if !store.skipped.isEmpty {
+            line += "\n\(store.skipped.count) repo\(store.skipped.count == 1 ? "" : "s") could not be read this time."
         }
-        return "\(counted) · \(store.totals.downloads.grouped) downloads · \(store.totals.stars.grouped) stars"
+        return line
     }
 
     private var emptyTitle: String {
@@ -124,9 +131,12 @@ struct RepoListView: View {
 
     private var emptyMessage: String {
         if store.latest.repos.isEmpty {
-            return store.hasToken
-                ? "Run the snapshot Action to collect your first set of counts."
-                : "Pull to load \(store.config.owner)/\(store.config.repo), or add a token in Settings to run the Action."
+            guard store.hasToken else {
+                return "Add a GitHub token in Settings, then pull to refresh."
+            }
+            return store.source == .direct
+                ? "Read your repositories to collect your first set of counts."
+                : "Run the snapshot Action to collect your first set of counts."
         }
         if mode == .issues { return "Nothing is open across your repositories." }
         if store.changedOnly { return "No counts moved between \(store.latest.previous) and \(store.latest.current)." }

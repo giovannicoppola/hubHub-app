@@ -1,5 +1,7 @@
 import Foundation
 
+/// Where the sync-mode data files live. Only used in `.sync`; direct
+/// collection needs no repo at all.
 struct GitHubConfig: Equatable, Codable {
     var owner: String
     var repo: String
@@ -8,8 +10,8 @@ struct GitHubConfig: Equatable, Codable {
     var seriesPath: String
     var workflowFile: String
 
-    /// The private vault, not the public workflow repo: `/user/repos` lists
-    /// private repositories, so publishing the counts would publish their names.
+    /// A private vault, not a public repo: `/user/repos` lists private
+    /// repositories, so publishing the counts would publish their names.
     static let `default` = GitHubConfig(
         owner: "giovannicoppola",
         repo: "gitVault",
@@ -18,37 +20,6 @@ struct GitHubConfig: Equatable, Codable {
         seriesPath: "gitVault-notes/hubhub/github-stats-series.json",
         workflowFile: "snapshot-stats.yml"
     )
-}
-
-enum GitHubError: LocalizedError, Equatable {
-    case missingToken
-    case badURL
-    case notFound(path: String, authenticated: Bool)
-    case rateLimited
-    case http(Int, String)
-    case decode(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingToken:
-            return "Add a GitHub personal access token in Settings to refresh."
-        case .badURL:
-            return "Invalid GitHub URL — check owner, repo and paths in Settings."
-        case .notFound(let path, let authenticated):
-            // Unauthenticated, a private data repo is indistinguishable from a
-            // missing file, and "has the Action run?" sends you hunting in the
-            // wrong place. Name both possibilities.
-            return authenticated
-                ? "Not found on GitHub: \(path). Has the Action run yet?"
-                : "Not found: \(path). Add a token in Settings if the data repo is private."
-        case .rateLimited:
-            return "GitHub rate limit reached. Add a token in Settings, or try again later."
-        case .http(let code, let body):
-            return "GitHub HTTP \(code): \(body)"
-        case .decode(let what):
-            return "Could not read \(what) — the file may still be being written."
-        }
-    }
 }
 
 /// The state of the snapshot Action, as far as the phone can see it.
@@ -65,25 +36,14 @@ struct WorkflowRun: Equatable {
     var succeeded: Bool { conclusion == "success" }
 }
 
-/// Read-only against the data repo: the app pulls two JSON files and can ask
-/// the Action to regenerate them. It never writes a file, so there is no
-/// sha handling and nothing to conflict.
+/// Sync mode: read the two JSON files an Action wrote, and ask it to run again.
+///
+/// Read-only, so there are no shas to reconcile and nothing can conflict.
 actor GitHubService {
-    private let session: URLSession
+    private let http: GitHubHTTP
 
     init(session: URLSession? = nil) {
-        if let session {
-            self.session = session
-        } else {
-            let configuration = URLSessionConfiguration.default
-            // A cached response would hand back the stats from before the
-            // Action ran, which is exactly what a refresh is trying to escape.
-            configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            configuration.urlCache = nil
-            configuration.timeoutIntervalForRequest = 25
-            configuration.timeoutIntervalForResource = 60
-            self.session = URLSession(configuration: configuration)
-        }
+        self.http = GitHubHTTP(session: session)
     }
 
     // MARK: - Reading data files
@@ -92,74 +52,53 @@ actor GitHubService {
     ///
     /// With a token this goes through the contents API with the `raw` media
     /// type, which — unlike the base64 JSON form — has no 1 MB ceiling. With no
-    /// token it falls back to `raw.githubusercontent.com`, so a fresh install
-    /// against a public repo shows stats before you have pasted anything.
+    /// token it falls back to `raw.githubusercontent.com`, so a public data
+    /// repo works before anything has been pasted.
     func fetchText(config: GitHubConfig, path: String, token: String) async throws -> String {
-        let url: URL?
-        var request: URLRequest
+        let encoded = GitHubHTTP.encode(path)
+        let request: URLRequest
 
         if token.isEmpty {
-            url = URL(string: "https://raw.githubusercontent.com/\(config.owner)/\(config.repo)/\(config.branch)/\(Self.encode(path))")
-            guard let url else { throw GitHubError.badURL }
-            request = URLRequest(url: url)
+            guard let url = URL(
+                string: "https://raw.githubusercontent.com/\(config.owner)/\(config.repo)/\(config.branch)/\(encoded)"
+            ) else { throw GitHubError.badURL }
+            request = http.request(url, token: "")
         } else {
-            url = URL(string: "\(Self.api)/repos/\(config.owner)/\(config.repo)/contents/\(Self.encode(path))?ref=\(config.branch)")
-            guard let url else { throw GitHubError.badURL }
-            request = URLRequest(url: url)
-            Self.applyHeaders(to: &request, token: token)
-            request.setValue("application/vnd.github.raw", forHTTPHeaderField: "Accept")
+            guard let url = URL(
+                string: "\(GitHubHTTP.api)/repos/\(config.owner)/\(config.repo)/contents/\(encoded)?ref=\(config.branch)"
+            ) else { throw GitHubError.badURL }
+            request = http.request(url, token: token, accept: "application/vnd.github.raw")
         }
 
-        let (data, http) = try await send(request)
-        guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: path, headers: http, authenticated: !token.isEmpty)
-        }
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw GitHubError.decode(path)
-        }
+        let (data, _) = try await http.send(request, describing: path, authenticated: !token.isEmpty)
+        guard let text = String(data: data, encoding: .utf8) else { throw GitHubError.decode(path) }
         return text
     }
 
     // MARK: - Running the snapshot Action
 
-    /// Kick off `snapshot-stats.yml` and return the run it started.
-    ///
-    /// `workflow_dispatch` answers 204 with no body, so the run has to be found
-    /// afterwards by looking for one newer than the moment we asked.
+    /// Kick off the workflow. `workflow_dispatch` answers 204 with no body, so
+    /// the run it started has to be found afterwards by polling.
     func dispatchSnapshot(config: GitHubConfig, token: String) async throws {
         guard !token.isEmpty else { throw GitHubError.missingToken }
         guard let url = URL(
-            string: "\(Self.api)/repos/\(config.owner)/\(config.repo)/actions/workflows/\(config.workflowFile)/dispatches"
+            string: "\(GitHubHTTP.api)/repos/\(config.owner)/\(config.repo)/actions/workflows/\(config.workflowFile)/dispatches"
         ) else { throw GitHubError.badURL }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        Self.applyHeaders(to: &request, token: token)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["ref": config.branch])
-
-        let (data, http) = try await send(request)
-        guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http, authenticated: true)
-        }
+        let body = try JSONSerialization.data(withJSONObject: ["ref": config.branch])
+        let request = http.request(url, token: token, method: "POST", body: body)
+        try await http.send(request, describing: config.workflowFile, authenticated: true)
     }
 
     /// The most recent run of the snapshot workflow, if there is one.
     func latestRun(config: GitHubConfig, token: String) async throws -> WorkflowRun? {
         guard !token.isEmpty else { throw GitHubError.missingToken }
         guard let url = URL(
-            string: "\(Self.api)/repos/\(config.owner)/\(config.repo)/actions/workflows/\(config.workflowFile)/runs?per_page=1"
+            string: "\(GitHubHTTP.api)/repos/\(config.owner)/\(config.repo)/actions/workflows/\(config.workflowFile)/runs?per_page=1"
         ) else { throw GitHubError.badURL }
 
-        var request = URLRequest(url: url)
-        Self.applyHeaders(to: &request, token: token)
-
-        let (data, http) = try await send(request)
-        guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http, authenticated: true)
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let runs = json["workflow_runs"] as? [[String: Any]],
+        let json = try await http.object(url, token: token, describing: config.workflowFile)
+        guard let runs = json["workflow_runs"] as? [[String: Any]],
               let run = runs.first,
               let id = run["id"] as? Int,
               let status = run["status"] as? String else {
@@ -172,56 +111,5 @@ actor GitHubService {
             htmlURL: (run["html_url"] as? String).flatMap(URL.init(string:)),
             createdAt: (run["created_at"] as? String).flatMap(ISO8601DateFormatter().date(from:))
         )
-    }
-
-    // MARK: - Plumbing
-
-    private static let api = "https://api.github.com"
-
-    private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubError.decode("the response") }
-        return (data, http)
-    }
-
-    private static func encode(_ path: String) -> String {
-        path.split(separator: "/").map {
-            $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0)
-        }.joined(separator: "/")
-    }
-
-    private static func applyHeaders(to request: inout URLRequest, token: String) {
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-    }
-
-    private static func error(status: Int, data: Data, path: String, headers: HTTPURLResponse, authenticated: Bool) -> GitHubError {
-        let message = Self.message(from: data)
-        switch status {
-        case 404:
-            return .notFound(path: path, authenticated: authenticated)
-        case 401:
-            return .http(401, "Bad or expired token — paste a new one in Settings.")
-        case 403 where headers.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0", 429:
-            return .rateLimited
-        case 403:
-            // Almost always the token missing Actions write, which reads very
-            // differently from a generic 403.
-            return .http(403, "\(message) (the token needs Actions: read and write to refresh)")
-        default:
-            return .http(status, message)
-        }
-    }
-
-    /// GitHub's JSON `message`, falling back to a truncated body — the raw blob
-    /// is unreadable in a status line on a phone.
-    private static func message(from data: Data) -> String {
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let message = json["message"] as? String {
-            return message
-        }
-        let text = String(data: data, encoding: .utf8) ?? ""
-        return text.count > 200 ? String(text.prefix(200)) + "…" : text
     }
 }

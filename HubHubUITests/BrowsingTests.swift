@@ -158,8 +158,14 @@ final class BrowsingTests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Reload stats file"].exists)
-        XCTAssertTrue(app.buttons["Run snapshot Action now"].exists)
+        // Both source options are offered, and the refresh button is labelled
+        // for whichever one is selected.
+        XCTAssertTrue(app.buttons["This phone"].exists, "the source picker")
+        XCTAssertTrue(app.buttons["GitHub Action"].exists, "the source picker")
+        XCTAssertTrue(
+            app.buttons["Read the counts now"].exists || app.buttons["Reload stats file"].exists,
+            "a refresh button for the selected source"
+        )
         attach(app, named: "settings")
     }
 }

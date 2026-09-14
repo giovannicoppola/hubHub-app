@@ -22,9 +22,23 @@ the same day-over-day deltas, on the phone.
 
 ## How it gets its data
 
-It does not walk the GitHub API from the phone. That would be ~250 requests over a cell
-connection every time you opened the app. Instead a scheduled Action in the data repo does the
-walking and commits the result, and the app reads two files:
+Two ways, chosen in **Settings → Source**.
+
+### This phone (default)
+
+The app reads the counts straight from the GitHub API and keeps the history on the device. Two
+requests per repo, so a normal account is a few seconds. Nothing to set up but a token — no
+repo, no Action, no secret.
+
+The history is one `history.json` in Application Support, in the same shape as the Action's
+`github-stats-history.json`, so the two are interchangeable. It keeps daily detail for a year
+and then one snapshot a month.
+
+### GitHub Action
+
+A scheduled Action collects the counts and commits them; the app just reads the files. Worth it
+for a large account, for snapshots that accrue while the app is closed, or to share one history
+with the Mac.
 
 | File | Size | When it's read |
 | --- | --- | --- |
@@ -32,37 +46,39 @@ walking and commits the result, and the app reads two files:
 | `gitVault-notes/hubhub/github-stats-series.json` | ~350 KB after a year | First time you open a chart |
 
 Both are written by `gitVault-notes/hubhub/snapshot_stats.py` in the private **gitVault** repo,
-from `.github/workflows/snapshot-stats.yml` there. The archival `github-stats-history.json`
-keeps the Alfred workflow's own JSON shape and is never downloaded by the app.
+from `.github/workflows/snapshot-stats.yml` there. The archival `github-stats-history.json` is
+never downloaded by the app.
 
-**Why the private vault and not the public workflow repo:** `/user/repos` lists private
+**Why a private vault and not the public workflow repo:** `/user/repos` lists private
 repositories too — 47 of them here — so publishing the counts would publish their names. The
 counts are harmless; the repo list is not.
 
-Consequences worth knowing:
+### Either way
 
-- **Offline first.** The last snapshot is cached on the phone. A failed or missing fetch shows
-  an error and leaves the list you already had — it never blanks it.
-- **A token is required**, because the data repo is private. (Against a *public* data repo the
-  app falls back to `raw.githubusercontent.com` and needs no token at all — that path is still
-  there if you ever point it at one.)
-- **Read-only.** The app never writes a file, so there is nothing to conflict and no shas to
-  reconcile. Refresh means "ask the Action to run", not "write to the repo".
+- **Offline first.** The last snapshot is cached on the phone. A failed refresh shows an error
+  and leaves the list you already had — it never blanks it.
 - **Deltas are between snapshots, not between launches.** The list header always names both
   dates, because a `+14` from a week-old snapshot means something different from today's.
 - **A repo in its first snapshot has no delta at all**, which is not the same as no change, and
   the row says nothing rather than `0`.
+- **A repo that can't be read is left out, not written down as zero.** A fabricated `0` would
+  show as a delta of −3,294 and then "recover" tomorrow. The list footer says how many were
+  skipped. If more than a quarter of the account fails, nothing is saved at all — that is
+  systemic, and writing it to history would corrupt every delta after it.
+- **The two modes keep separate histories**, so switching never shows one mode's numbers under
+  the other's snapshot dates.
 
 ## Requirements
 
 - Mac with Xcode 15+ (iOS 17+)
-- The `snapshot-stats.yml` Action in **gitVault**, and a `HUBHUB_PAT` secret there
-- A GitHub personal access token on the phone
-  - Fine-grained: Contents **Read**, Actions **Read and write** on `giovannicoppola/gitVault`
-  - Classic: `repo` + `workflow`
-  - The same token the **Dann Farm Inventory** app uses already covers this — it needs Contents
-    read/write and Actions read/write on the same repo. Paste it into both; each app keeps its
-    own Keychain entry.
+- A GitHub personal access token on the phone:
+  - **This phone** mode — reads your repositories. Fine-grained: Contents **Read** on all
+    repositories. Classic: `repo`.
+  - **GitHub Action** mode — reads the data repo and runs its Action. Fine-grained: Contents
+    **Read** + Actions **Read and write** on `giovannicoppola/gitVault`. Classic: `repo` +
+    `workflow`. Also needs the `snapshot-stats.yml` Action and a `HUBHUB_PAT` secret there.
+  - The same token the **Dann Farm Inventory** app uses covers Action mode. Paste it into both;
+    each app keeps its own Keychain entry.
 
 ## Open in Xcode
 
@@ -87,8 +103,10 @@ xcodebuild -project HubHub.xcodeproj -scheme HubHub \
 ```
 
 `HubHubTests` covers decoding both data files, delta and "changed" logic, every sort and filter,
-series gaps, and the store end to end against a stubbed URL protocol — offline cache, missing
-files, malformed responses and the persisted preferences.
+series gaps, the local history (recording, pruning, JSON round-trip), the collector against a
+fake GitHub (pagination, every-asset download totals, `subscribers_count` vs the stars alias,
+progress, skipped repos, the abort threshold), and the store end to end in both modes — offline
+cache, missing files, malformed responses, mode switching and the persisted preferences.
 
 `HubHubUITests` drives the real app: drilling into a repo draws its chart, the Issues tab really
 drops repos with no open issues, search narrows the list. They skip when the simulator has no
@@ -103,12 +121,11 @@ give the charts something to draw before the Action has run for a week.
 
 ## First launch
 
-1. Open **Settings** and confirm owner / repo / branch — by default `giovannicoppola/gitVault`
-   on `main`
-2. Paste your PAT → **Save token**
-3. Pull to refresh on the Repos tab
-4. Optional: **Run snapshot Action now** to take a fresh snapshot without waiting for the daily
-   schedule
+1. Open **Settings**, paste your PAT → **Save token**
+2. Pull to refresh on the Repos tab (or **Read the counts now**)
+
+That is the whole setup in **This phone** mode. For **GitHub Action** mode, switch Source first
+and confirm owner / repo / paths — by default `giovannicoppola/gitVault` on `main`.
 
 ## Notes
 

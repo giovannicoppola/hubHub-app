@@ -1,16 +1,39 @@
 import Foundation
 import Combine
 
+/// Where the counts come from.
+enum DataSource: String, CaseIterable, Identifiable, Codable {
+    /// The phone collects from the GitHub API itself. No repo, no Action.
+    case direct
+    /// Read the files an Action committed to a repo.
+    case sync
+
+    var id: String { rawValue }
+
+    var label: String { self == .direct ? "This phone" : "GitHub Action" }
+
+    var explanation: String {
+        switch self {
+        case .direct:
+            return "The phone reads the counts straight from the GitHub API and keeps the history here. Nothing to set up beyond a token."
+        case .sync:
+            return "Read the files a scheduled Action commits to a repo. Worth it for a large account, for snapshots that accrue while the app is closed, or to share one history with the Mac."
+        }
+    }
+}
+
 enum SyncStatus: Equatable {
     case idle
     case loading
     /// The snapshot Action is running; the string is what to show the user.
     case running(String)
+    /// Direct collection, part way through the account's repos.
+    case collecting(done: Int, total: Int)
     case failed(String)
 
     var isBusy: Bool {
         switch self {
-        case .loading, .running: return true
+        case .loading, .running, .collecting: return true
         case .idle, .failed: return false
         }
     }
@@ -24,8 +47,15 @@ enum SyncStatus: Equatable {
         switch self {
         case .loading: return "Loading…"
         case .running(let message): return message
+        case .collecting(let done, let total):
+            return total > 0 ? "Reading repos… \(done) of \(total)" : "Reading repos…"
         case .idle, .failed: return nil
         }
+    }
+
+    var fraction: Double? {
+        guard case .collecting(let done, let total) = self, total > 0 else { return nil }
+        return Double(done) / Double(total)
     }
 }
 
@@ -38,6 +68,10 @@ final class StatsStore: ObservableObject {
     @Published private(set) var status: SyncStatus = .idle
     @Published private(set) var hasToken = false
     @Published private(set) var lastRunURL: URL?
+    @Published private(set) var source: DataSource = .direct
+    /// Repos the last direct collection could not read, so the list can say so
+    /// rather than quietly showing fewer rows.
+    @Published private(set) var skipped: [String] = []
 
     @Published var selectedTab: AppTab = .repos
     @Published var search = ""
@@ -58,16 +92,20 @@ final class StatsStore: ObservableObject {
     // MARK: - Private state
 
     private let github: GitHubService
+    private let collector: StatsCollector
     private let defaults: UserDefaults
     /// Injectable so tests never scribble over the real app's offline cache —
     /// the test bundle shares a container with the host app.
     private let cacheDirectory: URL?
 
     private var cachedToken: String?
-    private var refreshTask: Task<Void, Never>?
     private var lastLatestFetch: Date?
+    /// Direct mode's history. Empty in sync mode, where the Action owns it.
+    private var history: LocalHistory = .empty
 
-    private let tokenAccount = "github_pat"
+    /// Injectable: the Keychain is process-wide, so tests that save a token
+    /// would otherwise leak it into every suite that runs after them.
+    private let tokenAccount: String
 
     private enum DefaultsKey {
         static let config = "gh_config"
@@ -75,24 +113,35 @@ final class StatsStore: ObservableObject {
         static let sort = "sort_order"
         static let changedOnlyOnLaunch = "changed_only_on_launch"
         static let lastFetch = "last_latest_fetch"
+        static let source = "data_source"
     }
 
     // MARK: - Init
 
     init(
         github: GitHubService = GitHubService(),
+        collector: StatsCollector = StatsCollector(),
         defaults: UserDefaults = .standard,
-        cacheDirectory: URL? = nil
+        cacheDirectory: URL? = nil,
+        tokenAccount: String = "github_pat"
     ) {
         self.github = github
+        self.collector = collector
         self.defaults = defaults
+        self.tokenAccount = tokenAccount
         self.cacheDirectory = cacheDirectory ?? Self.defaultCacheDirectory
 
-        if let data = defaults.data(forKey: DefaultsKey.config),
-           let stored = try? JSONDecoder().decode(GitHubConfig.self, from: data) {
-            self.config = stored
+        let storedConfig = defaults.data(forKey: DefaultsKey.config)
+            .flatMap { try? JSONDecoder().decode(GitHubConfig.self, from: $0) }
+        self.config = storedConfig ?? .default
+
+        if let raw = defaults.string(forKey: DefaultsKey.source), let stored = DataSource(rawValue: raw) {
+            self.source = stored
         } else {
-            self.config = .default
+            // New installs collect on the phone — no repo, no Action, nothing
+            // to set up. An install that already has a repo configured was set
+            // up before direct mode existed and keeps working as it did.
+            self.source = storedConfig == nil ? .direct : .sync
         }
 
         if let raw = defaults.array(forKey: DefaultsKey.metrics) as? [String] {
@@ -173,6 +222,15 @@ final class StatsStore: ObservableObject {
         defaults.set(order.rawValue, forKey: DefaultsKey.sort)
     }
 
+    func setSource(_ value: DataSource) {
+        guard value != source else { return }
+        source = value
+        defaults.set(value.rawValue, forKey: DefaultsKey.source)
+        // The two modes keep separate histories; show what the new one has
+        // rather than leaving the other mode's numbers on screen.
+        loadCache()
+    }
+
     func setChangedOnly(_ value: Bool) {
         changedOnly = value
     }
@@ -205,14 +263,53 @@ final class StatsStore: ObservableObject {
 
     // MARK: - Loading
 
-    /// Pull the latest snapshot file. Cheap (tens of KB) and safe to call on
-    /// every launch; the Action is what actually recomputes the numbers.
+    /// Bring the counts up to date, whichever way this install gets them.
+    ///
+    /// Direct collection is the expensive one — two requests per repo — so a
+    /// launch only triggers it when there is no snapshot for today yet.
     func refresh(force: Bool = false) async {
+        guard !status.isBusy else { return }
+        if source == .direct {
+            if !force, history.dates.last == LocalHistory.today(), !latest.repos.isEmpty { return }
+            await collectOnDevice()
+            return
+        }
         if !force, let last = lastLatestFetch, Date().timeIntervalSince(last) < 1800, !latest.repos.isEmpty {
             return
         }
-        guard !status.isBusy else { return }
+        await fetchFiles()
+    }
 
+    /// Direct mode: read the counts straight from the API and append today's
+    /// snapshot to the on-device history.
+    private func collectOnDevice() async {
+        guard let token = cachedToken, !token.isEmpty else {
+            status = .failed(GitHubError.missingToken.localizedDescription)
+            return
+        }
+
+        status = .collecting(done: 0, total: 0)
+        do {
+            let snapshot = try await collector.collect(token: token) { [weak self] done, total in
+                Task { @MainActor in
+                    guard let self, case .collecting = self.status else { return }
+                    self.status = .collecting(done: done, total: total)
+                }
+            }
+            history.record(snapshot)
+            skipped = snapshot.skipped
+            latest = history.latest()
+            series = history.series()
+            writeHistoryCache()
+            status = .idle
+        } catch {
+            // A failed collection leaves yesterday's history untouched, so the
+            // list keeps working.
+            status = .failed(message(for: error))
+        }
+    }
+
+    private func fetchFiles() async {
         status = .loading
         do {
             let text = try await github.fetchText(config: config, path: config.latestPath, token: cachedToken ?? "")
@@ -235,6 +332,9 @@ final class StatsStore: ObservableObject {
     /// order of magnitude bigger than the list data and most launches never
     /// open a chart.
     func loadSeries(force: Bool = false) async {
+        // Direct mode derives the series from the local history; there is no
+        // file to fetch.
+        guard source == .sync else { return }
         if !force, !series.dates.isEmpty { return }
         do {
             let text = try await github.fetchText(config: config, path: config.seriesPath, token: cachedToken ?? "")
@@ -248,7 +348,12 @@ final class StatsStore: ObservableObject {
     }
 
     /// Ask the Action to take a fresh snapshot, then wait for it and reload.
+    /// Sync mode only — in direct mode `refresh(force:)` is the equivalent.
     func runSnapshot() async {
+        guard source == .sync else {
+            await refresh(force: true)
+            return
+        }
         guard hasToken, let token = cachedToken else {
             status = .failed(GitHubError.missingToken.localizedDescription)
             return
@@ -315,13 +420,30 @@ final class StatsStore: ObservableObject {
         return directory
     }
 
+    /// Each mode has its own cache on disk, so switching between them shows
+    /// that mode's own history instead of the other's numbers under the wrong
+    /// snapshot dates.
     private func loadCache() {
-        if let text = readCache("latest.json"), let decoded = try? decode(LatestStats.self, from: text, describing: "cache") {
-            latest = decoded
+        switch source {
+        case .direct:
+            history = readCache("history.json")
+                .flatMap { try? decode(LocalHistory.self, from: $0, describing: "cache") } ?? .empty
+            latest = history.dates.isEmpty ? .empty : history.latest()
+            series = history.dates.isEmpty ? .empty : history.series()
+            skipped = []
+        case .sync:
+            latest = readCache("latest.json")
+                .flatMap { try? decode(LatestStats.self, from: $0, describing: "cache") } ?? .empty
+            series = readCache("series.json")
+                .flatMap { try? decode(StatsSeries.self, from: $0, describing: "cache") } ?? .empty
+            skipped = []
         }
-        if let text = readCache("series.json"), let decoded = try? decode(StatsSeries.self, from: text, describing: "cache") {
-            series = decoded
-        }
+    }
+
+    private func writeHistoryCache() {
+        guard let data = try? JSONEncoder().encode(history),
+              let text = String(data: data, encoding: .utf8) else { return }
+        writeCache(text, to: "history.json")
     }
 
     private func readCache(_ name: String) -> String? {
