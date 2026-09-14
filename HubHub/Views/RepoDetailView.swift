@@ -6,6 +6,9 @@ struct RepoDetailView: View {
     @EnvironmentObject private var store: StatsStore
     @State private var metric: Metric = .downloads
     @State private var loadingHistory = false
+    /// Held rather than recomputed: `chart`, `yDomain` and `chartFooter` each
+    /// need it, and SwiftUI asks for all three on every redraw.
+    @State private var points: [StatsSeries.Point] = []
 
     var body: some View {
         List {
@@ -70,15 +73,19 @@ struct RepoDetailView: View {
         .task {
             // The chart file is fetched the first time a chart is actually
             // looked at, not on launch.
-            guard store.series.dates.isEmpty else { return }
-            loadingHistory = true
-            await store.loadSeries()
-            loadingHistory = false
+            if store.series.dates.isEmpty {
+                loadingHistory = true
+                await store.loadSeries()
+                loadingHistory = false
+            }
+            reloadPoints()
         }
+        .onChange(of: metric) { _, _ in reloadPoints() }
+        .onChange(of: store.series) { _, _ in reloadPoints() }
     }
 
-    private var points: [StatsSeries.Point] {
-        store.series.points(repo: repo.name, metric: metric)
+    private func reloadPoints() {
+        points = store.series.points(repo: repo.name, metric: metric)
     }
 
     /// The data's own range with a little air, never the 0-based range.
@@ -118,7 +125,7 @@ struct RepoDetailView: View {
                     y: .value(metric.label, point.value)
                 )
                 .foregroundStyle(Color.accentColor)
-                .interpolationMethod(.monotone)
+                .interpolationMethod(.linear)
             }
             // Downloads climb from 3,227 to 3,294 over two months: anchored at
             // zero that trend is a flat line, which is the one thing the chart

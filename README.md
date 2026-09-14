@@ -14,7 +14,8 @@ the same day-over-day deltas, on the phone.
 - **Issues** — repos with open issues, most first, with the issue count pulled to the front of
   the row. Repos with none are dropped, not sorted to the bottom (the workflow's `--i` tag)
 - **Changed only** — the `--c` filter, in the ⋯ menu, plus a setting to open that way
-- **Search** across repo names from either tab
+- **Search** across repo names from either tab, with the header counting the matches
+  (`12 of 127 repos matching “alfred”`)
 - **Tap a repo** for its history charted over time — any of the five counts — and links straight
   to the repo or its issues page
 - **Settings** — which counts to show, sort order, the data repo, the PAT (Keychain), and a

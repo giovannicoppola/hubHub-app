@@ -26,8 +26,14 @@ struct RepoListView: View {
                             .accessibilityIdentifier("repoRow")
                         }
                     } header: {
-                        Text(store.provenance)
-                            .textCase(nil)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(countSummary)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(store.provenance)
+                        }
+                        .textCase(nil)
+                        .accessibilityIdentifier("listHeader")
                     } footer: {
                         Text(footer)
                     }
@@ -102,13 +108,34 @@ struct RepoListView: View {
         }
     }
 
-    private var footer: String {
+    /// How many repos are on screen, and out of how many — the first thing you
+    /// want to know while typing a search.
+    private var countSummary: String {
         let shown = rows.count
-        let total = mode == .all ? store.latest.repos.count : store.latest.repos.filter { $0.issues > 0 }.count
-        let counted = shown == total ? "\(total) repos" : "\(shown) of \(total) repos"
+        let total = mode == .all
+            ? store.latest.repos.count
+            : store.latest.repos.filter { $0.issues > 0 }.count
+        let query = store.search.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !query.isEmpty {
+            return "\(shown) of \(total) \(noun(total)) matching “\(query)”"
+        }
+        if mode == .all, store.changedOnly {
+            return "\(shown) of \(total) \(noun(total)) changed"
+        }
+        if mode == .issues {
+            return "\(total) \(noun(total)) with open issues"
+        }
+        return "\(total) \(noun(total))"
+    }
+
+    private func noun(_ count: Int) -> String { count == 1 ? "repo" : "repos" }
+
+    private var footer: String {
+        // The counts moved to the header; this is the totals behind them.
         var line = mode == .issues
-            ? "\(counted) · \(store.totals.issues) open issues"
-            : "\(counted) · \(store.totals.downloads.grouped) downloads · \(store.totals.stars.grouped) stars"
+            ? "\(store.totals.issues) open issues in total"
+            : "\(store.totals.downloads.grouped) downloads · \(store.totals.stars.grouped) stars in total"
         // Fewer rows than usual should never be silent.
         if !store.skipped.isEmpty {
             line += "\n\(store.skipped.count) repo\(store.skipped.count == 1 ? "" : "s") could not be read this time."

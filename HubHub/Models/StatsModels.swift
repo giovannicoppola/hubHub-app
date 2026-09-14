@@ -136,13 +136,26 @@ struct StatsSeries: Codable, Equatable {
         return formatter
     }()
 
+    /// The date strings parsed once, in order.
+    ///
+    /// Every chart redraw used to re-parse all 143 of them, three times over —
+    /// once for the marks, once for the y-domain, once for the caption — which
+    /// is what made switching metrics feel sticky.
+    private static let parsedCache = ParsedDateCache()
+
+    var parsedDates: [Date?] { Self.parsedCache.parse(dates) }
+
     /// Charting points for one repo and metric, gaps dropped.
     func points(repo: String, metric: Metric) -> [Point] {
         guard let values = repos[repo]?[metric.rawValue] else { return [] }
-        return zip(dates, values).compactMap { date, value in
-            guard let value, let parsed = Self.dateParser.date(from: date) else { return nil }
-            return Point(date: parsed, value: value)
+        let parsed = parsedDates
+        var result: [Point] = []
+        result.reserveCapacity(values.count)
+        for (index, value) in values.enumerated() {
+            guard let value, index < parsed.count, let date = parsed[index] else { continue }
+            result.append(Point(date: date, value: value))
         }
+        return result
     }
 
     /// Whether this repo has enough history for a line rather than a dot.
@@ -185,6 +198,23 @@ enum SortOrder: String, CaseIterable, Identifiable, Codable {
         case .watchers: return .watchers
         case .name, .recentChange: return nil
         }
+    }
+}
+
+/// Parses a series' date strings once and hands the same array back for as
+/// long as that series is on screen.
+final class ParsedDateCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var key: [String] = []
+    private var value: [Date?] = []
+
+    func parse(_ dates: [String]) -> [Date?] {
+        lock.lock()
+        defer { lock.unlock() }
+        if dates == key { return value }
+        key = dates
+        value = dates.map { StatsSeries.dateParser.date(from: $0) }
+        return value
     }
 }
 

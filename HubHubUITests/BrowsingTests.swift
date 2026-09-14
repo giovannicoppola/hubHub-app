@@ -153,6 +153,26 @@ final class BrowsingTests: XCTestCase {
         return element.exists && element.isHittable
     }
 
+    /// The count belongs at the top, where you look while typing a search.
+    func testHeaderCountsTheReposAndTracksTheSearch() throws {
+        let app = try launch()
+        let header = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH ' repos'")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 5), "a plain total before searching")
+        let total = header.label
+
+        let target = firstRepoName(in: app)
+        try XCTSkipIf(target.isEmpty, "no rows to search")
+        let field = app.searchFields.firstMatch
+        field.tap()
+        field.typeText(target)
+
+        let matching = app.staticTexts.matching(NSPredicate(format: "label CONTAINS ' matching '")).firstMatch
+        XCTAssertTrue(matching.waitForExistence(timeout: 5), "the header should count the matches")
+        XCTAssertNotEqual(matching.label, total)
+        XCTAssertTrue(matching.label.contains(target), "and name the query: \(matching.label)")
+        attach(app, named: "search-count")
+    }
+
     func testSettingsOffersTheRefreshControls() throws {
         let app = try launch()
         app.tabBars.buttons["Settings"].tap()
