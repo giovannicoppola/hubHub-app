@@ -8,12 +8,14 @@ struct GitHubConfig: Equatable, Codable {
     var seriesPath: String
     var workflowFile: String
 
+    /// The private vault, not the public workflow repo: `/user/repos` lists
+    /// private repositories, so publishing the counts would publish their names.
     static let `default` = GitHubConfig(
         owner: "giovannicoppola",
-        repo: "alfred-hubHub",
+        repo: "gitVault",
         branch: "main",
-        latestPath: "data/github-stats-latest.json",
-        seriesPath: "data/github-stats-series.json",
+        latestPath: "gitVault-notes/hubhub/github-stats-latest.json",
+        seriesPath: "gitVault-notes/hubhub/github-stats-series.json",
         workflowFile: "snapshot-stats.yml"
     )
 }
@@ -21,7 +23,7 @@ struct GitHubConfig: Equatable, Codable {
 enum GitHubError: LocalizedError, Equatable {
     case missingToken
     case badURL
-    case notFound(String)
+    case notFound(path: String, authenticated: Bool)
     case rateLimited
     case http(Int, String)
     case decode(String)
@@ -32,8 +34,13 @@ enum GitHubError: LocalizedError, Equatable {
             return "Add a GitHub personal access token in Settings to refresh."
         case .badURL:
             return "Invalid GitHub URL — check owner, repo and paths in Settings."
-        case .notFound(let path):
-            return "Not found on GitHub: \(path). Has the Action run yet?"
+        case .notFound(let path, let authenticated):
+            // Unauthenticated, a private data repo is indistinguishable from a
+            // missing file, and "has the Action run?" sends you hunting in the
+            // wrong place. Name both possibilities.
+            return authenticated
+                ? "Not found on GitHub: \(path). Has the Action run yet?"
+                : "Not found: \(path). Add a token in Settings if the data repo is private."
         case .rateLimited:
             return "GitHub rate limit reached. Add a token in Settings, or try again later."
         case .http(let code, let body):
@@ -105,7 +112,7 @@ actor GitHubService {
 
         let (data, http) = try await send(request)
         guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: path, headers: http)
+            throw Self.error(status: http.statusCode, data: data, path: path, headers: http, authenticated: !token.isEmpty)
         }
         guard let text = String(data: data, encoding: .utf8) else {
             throw GitHubError.decode(path)
@@ -133,7 +140,7 @@ actor GitHubService {
 
         let (data, http) = try await send(request)
         guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http)
+            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http, authenticated: true)
         }
     }
 
@@ -149,7 +156,7 @@ actor GitHubService {
 
         let (data, http) = try await send(request)
         guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http)
+            throw Self.error(status: http.statusCode, data: data, path: config.workflowFile, headers: http, authenticated: true)
         }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let runs = json["workflow_runs"] as? [[String: Any]],
@@ -189,11 +196,11 @@ actor GitHubService {
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
     }
 
-    private static func error(status: Int, data: Data, path: String, headers: HTTPURLResponse) -> GitHubError {
+    private static func error(status: Int, data: Data, path: String, headers: HTTPURLResponse, authenticated: Bool) -> GitHubError {
         let message = Self.message(from: data)
         switch status {
         case 404:
-            return .notFound(path)
+            return .notFound(path: path, authenticated: authenticated)
         case 401:
             return .http(401, "Bad or expired token — paste a new one in Settings.")
         case 403 where headers.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0", 429:

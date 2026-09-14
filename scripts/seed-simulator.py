@@ -24,8 +24,9 @@ import subprocess
 import sys
 
 BUNDLE_ID = "com.giovannicoppola.hubhub"
-DEFAULT_HISTORY = os.path.expanduser("~/github/alfred-GitHubHub/data/github-stats-history.json")
-SNAPSHOT_SCRIPT = os.path.expanduser("~/github/alfred-GitHubHub/scripts")
+VAULT = os.path.expanduser("~/github/gitVault/gitVault-notes/hubhub")
+DEFAULT_HISTORY = os.path.join(VAULT, "github-stats-history.json")
+SNAPSHOT_SCRIPT = VAULT
 
 
 def container(device: str) -> str:
@@ -72,7 +73,7 @@ def main() -> int:
         raise SystemExit(f"Could not import snapshot_stats from {SNAPSHOT_SCRIPT}")
 
     if not os.path.exists(args.history):
-        raise SystemExit(f"No history at {args.history}. Run snapshot_stats.py in alfred-GitHubHub first.")
+        raise SystemExit(f"No history at {args.history}. Run snapshot_stats.py in gitVault first.")
 
     real = json.load(open(args.history, encoding="utf-8"))
     urls = real.get("RepoURLs", {})

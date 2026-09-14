@@ -28,21 +28,24 @@ walking and commits the result, and the app reads two files:
 
 | File | Size | When it's read |
 | --- | --- | --- |
-| `data/github-stats-latest.json` | ~45 KB | Every launch — the list and its deltas |
-| `data/github-stats-series.json` | ~350 KB after a year | First time you open a chart |
+| `gitVault-notes/hubhub/github-stats-latest.json` | ~45 KB | Every launch — the list and its deltas |
+| `gitVault-notes/hubhub/github-stats-series.json` | ~350 KB after a year | First time you open a chart |
 
-Both are written by [`scripts/snapshot_stats.py`](https://github.com/giovannicoppola/alfred-hubHub/blob/main/scripts/snapshot_stats.py)
-in the workflow's repo, from `.github/workflows/snapshot-stats.yml`. The archival
-`github-stats-history.json` keeps the Alfred workflow's own JSON shape and is never downloaded
-by the app.
+Both are written by `gitVault-notes/hubhub/snapshot_stats.py` in the private **gitVault** repo,
+from `.github/workflows/snapshot-stats.yml` there. The archival `github-stats-history.json`
+keeps the Alfred workflow's own JSON shape and is never downloaded by the app.
+
+**Why the private vault and not the public workflow repo:** `/user/repos` lists private
+repositories too — 47 of them here — so publishing the counts would publish their names. The
+counts are harmless; the repo list is not.
 
 Consequences worth knowing:
 
 - **Offline first.** The last snapshot is cached on the phone. A failed or missing fetch shows
   an error and leaves the list you already had — it never blanks it.
-- **No token needed to read.** Against a public data repo the app falls back to
-  `raw.githubusercontent.com`, so a fresh install shows numbers before you have pasted anything.
-  A token is needed to run the Action, and to read a private data repo.
+- **A token is required**, because the data repo is private. (Against a *public* data repo the
+  app falls back to `raw.githubusercontent.com` and needs no token at all — that path is still
+  there if you ever point it at one.)
 - **Read-only.** The app never writes a file, so there is nothing to conflict and no shas to
   reconcile. Refresh means "ask the Action to run", not "write to the repo".
 - **Deltas are between snapshots, not between launches.** The list header always names both
@@ -53,11 +56,13 @@ Consequences worth knowing:
 ## Requirements
 
 - Mac with Xcode 15+ (iOS 17+)
-- The data repo, with the Action set up — see
-  [Setting up the Action](https://github.com/giovannicoppola/alfred-hubHub#the-iphone-app-)
-- Optional GitHub personal access token, to refresh from the phone
-  - Fine-grained: Contents **Read**, Actions **Read and write** on the data repo
+- The `snapshot-stats.yml` Action in **gitVault**, and a `HUBHUB_PAT` secret there
+- A GitHub personal access token on the phone
+  - Fine-grained: Contents **Read**, Actions **Read and write** on `giovannicoppola/gitVault`
   - Classic: `repo` + `workflow`
+  - The same token the **Dann Farm Inventory** app uses already covers this — it needs Contents
+    read/write and Actions read/write on the same repo. Paste it into both; each app keeps its
+    own Keychain entry.
 
 ## Open in Xcode
 
@@ -93,16 +98,17 @@ cached snapshot, so seed one first:
 python3 scripts/seed-simulator.py --days 60
 ```
 
-That reads the real counts from `alfred-GitHubHub/data/` and walks them backwards to give the
-charts something to draw before the Action has run for a week.
+That reads the real counts from `gitVault/gitVault-notes/hubhub/` and walks them backwards to
+give the charts something to draw before the Action has run for a week.
 
 ## First launch
 
-1. Open **Settings** and confirm owner / repo / branch — by default
-   `giovannicoppola/alfred-hubHub` on `main`
-2. Pull to refresh on the Repos tab. Against a public repo this already works
-3. Optional: paste a PAT → **Save token** → **Run snapshot Action now** to take a fresh
-   snapshot without waiting for the daily schedule
+1. Open **Settings** and confirm owner / repo / branch — by default `giovannicoppola/gitVault`
+   on `main`
+2. Paste your PAT → **Save token**
+3. Pull to refresh on the Repos tab
+4. Optional: **Run snapshot Action now** to take a fresh snapshot without waiting for the daily
+   schedule
 
 ## Notes
 

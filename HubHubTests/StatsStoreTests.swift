@@ -124,7 +124,10 @@ final class StatsStoreTests: XCTestCase {
         guard let message = store.status.errorMessage else {
             return XCTFail("expected a failure status, got \(store.status)")
         }
-        XCTAssertTrue(message.contains("data/github-stats-latest.json"), message)
+        XCTAssertTrue(message.contains(store.config.latestPath), message)
+        // With no token a 404 cannot tell a private repo from a missing file,
+        // and must not send the reader off to check the Action.
+        XCTAssertTrue(message.contains("token"), message)
     }
 
     /// A corrupt or half-written file must not wipe out the good cached list.
