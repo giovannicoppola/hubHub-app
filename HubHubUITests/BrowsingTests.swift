@@ -116,6 +116,43 @@ final class BrowsingTests: XCTestCase {
         attach(app, named: "search-empty")
     }
 
+    /// The keyboard covers the tab bar, and a *pasted* token never fires
+    /// Return — so without a Done button above the keyboard there is no way off
+    /// the Settings screen short of force-quitting the app. This happened.
+    func testKeyboardCanBeDismissedAfterTypingAToken() throws {
+        let app = try launch()
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+
+        let field = app.secureTextFields["Personal access token"]
+        XCTAssertTrue(scrollTo(field, in: app), "could not reach the token field")
+        field.tap()
+        field.typeText("ghp_not_a_real_token")
+
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5), "the keyboard should be up")
+        // Not app.buttons["Done"]: the return key is also labelled Done, so
+        // that query matches two elements.
+        let done = app.buttons["dismissKeyboard"]
+        XCTAssertTrue(done.exists, "a Done button must sit above the keyboard")
+        done.tap()
+
+        // The point of the fix: the tab bar is reachable again.
+        let repos = app.tabBars.buttons["Repos"]
+        XCTAssertTrue(repos.waitForExistence(timeout: 5) && repos.isHittable, "the tab bar is usable again")
+        repos.tap()
+        XCTAssertTrue(app.navigationBars["hubHub"].waitForExistence(timeout: 5), "left Settings without force-quitting")
+    }
+
+    /// Settings is longer than a phone screen; scroll until the element is
+    /// actually tappable rather than failing on a hit-test.
+    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 8) -> Bool {
+        for _ in 0..<attempts {
+            if element.exists, element.isHittable { return true }
+            app.swipeUp()
+        }
+        return element.exists && element.isHittable
+    }
+
     func testSettingsOffersTheRefreshControls() throws {
         let app = try launch()
         app.tabBars.buttons["Settings"].tap()

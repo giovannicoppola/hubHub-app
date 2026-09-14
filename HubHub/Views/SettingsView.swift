@@ -5,6 +5,9 @@ struct SettingsView: View {
     @State private var tokenDraft = ""
     @State private var showToken = false
     @State private var tokenSaved = false
+    /// A pasted token never triggers Return, and the keyboard covers the tab
+    /// bar — without a way to dismiss it there is no way off this screen.
+    @FocusState private var editing: Bool
 
     var body: some View {
         NavigationStack {
@@ -61,23 +64,29 @@ struct SettingsView: View {
 
                 Section {
                     TextField("Owner", text: $store.config.owner)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Repo", text: $store.config.repo)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Branch", text: $store.config.branch)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Latest stats path", text: $store.config.latestPath, axis: .vertical)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .lineLimit(1...3)
                     TextField("History series path", text: $store.config.seriesPath, axis: .vertical)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .lineLimit(1...3)
                     TextField("Workflow file", text: $store.config.workflowFile)
+                        .focused($editing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } header: {
@@ -92,10 +101,16 @@ struct SettingsView: View {
                             TextField("Personal access token", text: $tokenDraft)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                                .focused($editing)
+                                .submitLabel(.done)
+                                .onSubmit { editing = false }
                         } else {
                             SecureField("Personal access token", text: $tokenDraft)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                                .focused($editing)
+                                .submitLabel(.done)
+                                .onSubmit { editing = false }
                         }
                         Button {
                             showToken.toggle()
@@ -108,6 +123,7 @@ struct SettingsView: View {
                     Button("Save token") {
                         tokenSaved = store.saveToken(tokenDraft)
                         tokenDraft = ""
+                        editing = false
                     }
                     if tokenSaved || store.hasToken {
                         Label(
@@ -136,6 +152,16 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            // Three ways off the keyboard: a Done button above it, a swipe down
+            // the form, and Return.
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { editing = false }
+                        .accessibilityIdentifier("dismissKeyboard")
+                }
+            }
         }
     }
 
