@@ -159,10 +159,22 @@ Export compliance is answered in the bundle: `ITSAppUsesNonExemptEncryption = NO
 **Last verified archive: 22 September 2026, 1.0.0 (1).** Signed `Apple Distribution: Giovanni
 Coppola (VDG762YNX9)` against *iOS Team Store Provisioning Profile: com.giovannicoppola.hubhub*,
 `get-task-allow` false, `PrivacyInfo.xcprivacy` in the bundle, category and encryption keys in
-Info.plist. **Not uploaded.**
+Info.plist.
 
-The one build warning ("All interface orientations must be supported unless the app requires full
-screen") is about iPad multitasking. This app is iPhone-only, so it does not apply.
+**Uploaded 22 September 2026**: 1.0.0 (1), delivery `0bcb1fc5-2e94-4d09-85e5-2979e87d2537`.
+**Build 1 is used up**, so a resubmission needs `CURRENT_PROJECT_VERSION: "2"`.
+
+The ASC record is *hubHub — Repo Stats* (Apple ID 6815015600). The name was entered with a double
+space before the dash; fix it on the version page.
+
+**Do not ignore the orientation warning.** "All interface orientations must be supported unless
+the app requires full screen" looks like it is only about iPad, but an iPhone-only app still runs on
+iPad, and App Store validation rejects the bundle with a 409 over it. `project.yml` therefore lists
+all four orientations, upside-down included (Face ID iPhones never rotate upside down anyway).
+Hit and fixed on 22 September 2026.
+
+`altool` exits 0 even when it fails, so `archive.sh` checks its output instead. Before that change
+the script announced "Uploaded" right after a rejection.
 
 ---
 
@@ -175,9 +187,10 @@ screen") is about iPad multitasking. This app is iPhone-only, so it does not app
 - [x] 6.9" screenshots generated (§4)
 - [x] Signed archive and export verified (§5)
 - [ ] Pages enabled on alfred-hubHub and the privacy URL returns 200 (§2)
-- [ ] App Store Connect record created (§2)
+- [x] App Store Connect record created (§2): Apple ID 6815015600, SKU `hubhub-ios-001`
 - [ ] App Privacy answered "No data collected" (§3)
-- [ ] Build uploaded, processed, and selected on the 1.0.0 version
+- [x] Build uploaded: 1.0.0 (1), 22 September 2026
+- [ ] Build processed and selected on the 1.0.0 version
 - [ ] Tested from TestFlight on a clean install: sample data on, then off; save a token; read
       the counts; import an Alfred history
 - [ ] Version/build bumped for any resubmission (build numbers cannot repeat)

@@ -34,11 +34,23 @@ echo "==> Exported: $IPA"
 
 if [[ "${1:-}" == "--upload" ]]; then
   : "${ASC_KEY_ID:?set ASC_KEY_ID}" "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}"
+  # altool exits 0 even when validation or upload fails, so its output is
+  # the only reliable signal — without this the script announced "Uploaded"
+  # over a 409 rejection.
+  altool() {
+    local log
+    log="$(mktemp)"
+    xcrun altool "$@" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee "$log"
+    if grep -qE "FAILED|ERROR:" "$log"; then
+      rm -f "$log"
+      echo "==> altool reported a failure; stopping." >&2
+      exit 1
+    fi
+    rm -f "$log"
+  }
   echo "==> Validating"
-  xcrun altool --validate-app -f "$IPA" -t ios \
-    --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+  altool --validate-app -f "$IPA" -t ios
   echo "==> Uploading"
-  xcrun altool --upload-app -f "$IPA" -t ios \
-    --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+  altool --upload-app -f "$IPA" -t ios
   echo "==> Uploaded. Processing takes ~5-15 min before the build shows in TestFlight."
 fi

@@ -11,7 +11,10 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_CFBundleDisplayName: hubHub
-    INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    # All four, upside-down included: an iPhone-only app still runs on iPad,
+    # and App Store validation rejects the bundle (409) without the full set
+    # for iPad multitasking. Face ID iPhones never rotate upside down anyway.
+    INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     GENERATE_INFOPLIST_FILE: YES
     CURRENT_PROJECT_VERSION: "1"
     MARKETING_VERSION: "1.0.0"
