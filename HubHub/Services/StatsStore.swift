@@ -10,6 +10,18 @@ enum DataSource: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// The sources this build offers. Action mode needs `snapshot_stats.py`
+    /// and a data repo that exist only in the owner's private vault, so a
+    /// store build offering it would hand everyone else — App Review included —
+    /// a 404 and the name of a private repo. It stays in Debug builds.
+    static var available: [DataSource] {
+        #if DEBUG
+        return allCases
+        #else
+        return [.direct]
+        #endif
+    }
+
     var label: String { self == .direct ? "This phone" : "GitHub Action" }
 
     var explanation: String {
@@ -72,6 +84,9 @@ final class StatsStore: ObservableObject {
     /// Repos the last direct collection could not read, so the list can say so
     /// rather than quietly showing fewer rows.
     @Published private(set) var skipped: [String] = []
+    /// Showing `SampleData` instead of anyone's real repositories — for App
+    /// Review, and for a first look before pasting a token.
+    @Published private(set) var usingSample = false
 
     @Published var selectedTab: AppTab = .repos
     @Published var search = ""
@@ -117,6 +132,7 @@ final class StatsStore: ObservableObject {
         static let lastFetch = "last_latest_fetch"
         static let source = "data_source"
         static let seriesStamp = "series_stamp"
+        static let sample = "sample_data"
     }
 
     // MARK: - Init
@@ -138,14 +154,17 @@ final class StatsStore: ObservableObject {
             .flatMap { try? JSONDecoder().decode(GitHubConfig.self, from: $0) }
         self.config = storedConfig ?? .default
 
+        let wanted: DataSource
         if let raw = defaults.string(forKey: DefaultsKey.source), let stored = DataSource(rawValue: raw) {
-            self.source = stored
+            wanted = stored
         } else {
             // New installs collect on the phone — no repo, no Action, nothing
             // to set up. An install that already has a repo configured was set
             // up before direct mode existed and keeps working as it did.
-            self.source = storedConfig == nil ? .direct : .sync
+            wanted = storedConfig == nil ? .direct : .sync
         }
+        self.source = DataSource.available.contains(wanted) ? wanted : .direct
+        self.usingSample = defaults.bool(forKey: DefaultsKey.sample)
 
         if let raw = defaults.array(forKey: DefaultsKey.metrics) as? [String] {
             let restored = Set(raw.compactMap(Metric.init(rawValue:)))
@@ -235,6 +254,14 @@ final class StatsStore: ObservableObject {
         loadCache()
     }
 
+    func setUsingSample(_ value: Bool) {
+        guard value != usingSample else { return }
+        usingSample = value
+        defaults.set(value, forKey: DefaultsKey.sample)
+        if value { status = .idle }
+        loadCache()
+    }
+
     func setChangedOnly(_ value: Bool) {
         changedOnly = value
     }
@@ -257,6 +284,9 @@ final class StatsStore: ObservableObject {
         if saved {
             cachedToken = trimmed
             hasToken = true
+            // A real token means real numbers; leaving the sample up would put
+            // made-up counts under a real account.
+            setUsingSample(false)
         }
         return saved
     }
@@ -267,6 +297,9 @@ final class StatsStore: ObservableObject {
     /// `import_alfred_history.py` does the same job there.
     @discardableResult
     func importAlfredHistory(from url: URL) -> String {
+        guard !usingSample else {
+            return "Turn off sample data first — the history would go under the sample's repos."
+        }
         guard source == .direct else {
             return "Switch Source to “This phone” first — in Action mode the repo owns the history."
         }
@@ -305,8 +338,12 @@ final class StatsStore: ObservableObject {
     /// Direct collection is the expensive one — two requests per repo — so a
     /// launch only triggers it when there is no snapshot for today yet.
     func refresh(force: Bool = false) async {
-        guard !status.isBusy else { return }
+        guard !status.isBusy, !usingSample else { return }
         if source == .direct {
+            // A launch with no token has nothing to read, and the empty list
+            // already says to add one — a red error on first launch is noise.
+            // (Sync mode can still read a public data repo without one.)
+            if !force, !hasToken { return }
             if !force, history.dates.last == LocalHistory.today(), !latest.repos.isEmpty { return }
             await collectOnDevice()
             return
@@ -466,6 +503,13 @@ final class StatsStore: ObservableObject {
     /// that mode's own history instead of the other's numbers under the wrong
     /// snapshot dates.
     private func loadCache() {
+        if usingSample {
+            history = SampleData.history()
+            latest = history.latest()
+            series = history.series()
+            skipped = []
+            return
+        }
         switch source {
         case .direct:
             history = readCache("history.json")

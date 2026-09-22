@@ -15,6 +15,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if DataSource.available.count > 1 {
                 Section {
                     Picker("Counts come from", selection: Binding(get: { store.source }, set: store.setSource)) {
                         ForEach(DataSource.allCases) { option in
@@ -27,6 +28,7 @@ struct SettingsView: View {
                 } footer: {
                     Text(store.source.explanation)
                 }
+                }
 
                 Section {
                     Button {
@@ -37,7 +39,7 @@ struct SettingsView: View {
                             systemImage: "arrow.clockwise"
                         )
                     }
-                    .disabled(store.status.isBusy || (store.source == .direct && !store.hasToken))
+                    .disabled(store.status.isBusy || store.usingSample || (store.source == .direct && !store.hasToken))
 
                     if store.source == .sync {
                         Button {
@@ -57,7 +59,18 @@ struct SettingsView: View {
                     Text(refreshFooter)
                 }
 
-                if store.source == .direct {
+                Section {
+                    Toggle(isOn: Binding(get: { store.usingSample }, set: store.setUsingSample)) {
+                        Text("Use sample data")
+                    }
+                    .accessibilityIdentifier("sampleToggle")
+                } header: {
+                    Text("Sample data")
+                } footer: {
+                    Text("Fills the app with a made-up account so you can see how it works before adding a token. None of it is real, and saving a token turns it off.")
+                }
+
+                if store.source == .direct, !store.usingSample {
                     Section {
                         Button {
                             importing = true
@@ -203,6 +216,16 @@ struct SettingsView: View {
                         Link("Action history on GitHub", destination: url)
                     }
                 }
+
+                Section {
+                    Link("Privacy policy", destination: AppLinks.privacy)
+                    Link("Support and feedback", destination: AppLinks.support)
+                    LabeledContent("Version", value: AppLinks.version)
+                } header: {
+                    Text("About")
+                } footer: {
+                    Text("hubHub is an independent app. It is not affiliated with, endorsed by, or sponsored by GitHub, Inc. or Alfred. It reads your own repositories' counts with your own token and sends them nowhere.")
+                }
             }
             .navigationTitle("Settings")
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
@@ -227,6 +250,9 @@ struct SettingsView: View {
     }
 
     private var refreshFooter: String {
+        if store.usingSample {
+            return "Showing sample data. Turn it off below to read your own repositories."
+        }
         var lines = [store.provenance]
         if store.isStale, store.source == .sync {
             lines.append("That is more than a day old — the scheduled Action may not have run.")
@@ -247,5 +273,18 @@ struct SettingsView: View {
         case .sync:
             return "Needs to read the data repo and run its Action. Fine-grained: Contents Read and Actions Read and Write on \(store.config.owner)/\(store.config.repo). Classic: repo + workflow. Stored on this device only, in the Keychain."
         }
+    }
+}
+
+/// Where the About section points.
+enum AppLinks {
+    static let privacy = URL(string: "https://giovannicoppola.github.io/alfred-hubHub/ios/privacy.html")!
+    static let support = URL(string: "https://github.com/giovannicoppola/alfred-hubHub/issues")!
+
+    static var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
     }
 }

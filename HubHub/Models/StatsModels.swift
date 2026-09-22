@@ -81,8 +81,10 @@ struct RepoStats: Codable, Equatable, Identifiable, Hashable {
         Counts(downloads: downloads, issues: issues, stars: stars, forks: forks, watchers: watchers)
     }
 
-    var issuesURL: URL? { URL(string: url + "/issues") }
-    var repoURL: URL? { URL(string: url) }
+    // An empty URL is a repo with nowhere to link to (the sample data), and
+    // must not become the relative URL "/issues".
+    var issuesURL: URL? { url.isEmpty ? nil : URL(string: url + "/issues") }
+    var repoURL: URL? { url.isEmpty ? nil : URL(string: url) }
 
     func value(_ metric: Metric) -> Int { counts[metric] }
 

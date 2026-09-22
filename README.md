@@ -199,6 +199,12 @@ To build the public-only history, filter the full one to repos that are not priv
 the result before shooting — `xcrun simctl ui <device> appearance light` first, since the images
 sit on a white README.
 
+## App Store
+
+Submission runbook, review notes and risks: [`docs/app-store-submission.md`](docs/app-store-submission.md).
+Listing copy: [`docs/app-store-metadata.md`](docs/app-store-metadata.md). Store screenshots in
+`docs/appstore/` are shot from the built-in sample account, never real data.
+
 ## Notes
 
 - Downloads count every asset of every release. The Alfred workflow counted `assets[0]` only, so

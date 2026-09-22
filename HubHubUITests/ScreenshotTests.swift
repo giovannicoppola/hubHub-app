@@ -60,4 +60,36 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
         shoot(app, "06-settings")
     }
+
+    /// The App Store set: the sample account, so no real repository name —
+    /// public or private — can reach the listing, and so the set can be
+    /// regenerated on any simulator without seeding. Shoot on a 6.9" device
+    /// (iPhone 16 Pro Max → 1320 x 2868) and export with `--full`.
+    func testCaptureAppStoreScreens() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["HUBHUB_SHOTS"] == "appstore", "set HUBHUB_SHOTS=appstore to capture")
+
+        let app = XCUIApplication()
+        // The argument domain overrides UserDefaults for this launch only, so
+        // the simulator's own settings are left as they were.
+        app.launchArguments += ["-sample_data", "YES"]
+        app.launch()
+        XCTAssertTrue(app.buttons.matching(identifier: "repoRow").firstMatch.waitForExistence(timeout: 15))
+        shoot(app, "01-repos")
+
+        app.buttons.matching(identifier: "repoRow").element(boundBy: 0).tap()
+        XCTAssertTrue(app.otherElements["historyChart"].waitForExistence(timeout: 10))
+        shoot(app, "02-chart-downloads")
+
+        app.buttons["Stars"].tap()
+        XCTAssertTrue(app.otherElements["historyChart"].waitForExistence(timeout: 10))
+        shoot(app, "03-chart-stars")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["hubHub"].waitForExistence(timeout: 10))
+
+        app.tabBars.buttons["Issues"].tap()
+        XCTAssertTrue(app.navigationBars["Issues"].waitForExistence(timeout: 10))
+        shoot(app, "04-issues")
+        // No Settings shot: UI tests run the Debug build, whose Source picker
+        // offers an Action mode the store build does not have.
+    }
 }

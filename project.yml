@@ -13,17 +13,23 @@ settings:
     INFOPLIST_KEY_CFBundleDisplayName: hubHub
     INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     GENERATE_INFOPLIST_FILE: YES
-    CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0.0"
 targets:
   HubHub:
     type: application
     platform: iOS
     sources:
       - path: HubHub
+      - path: Config/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.giovannicoppola.hubhub
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        # HTTPS through URLSession only, which is exempt — answers export
+        # compliance in the bundle so App Store Connect stops asking per upload.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: VDG762YNX9
         CODE_SIGN_STYLE: Automatic
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO

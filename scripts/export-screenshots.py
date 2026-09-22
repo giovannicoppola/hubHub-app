@@ -6,6 +6,10 @@ UUIDs. This extracts them under their attachment names and downscales them, so
 a README does not carry six full-resolution phone screens.
 
     python3 scripts/export-screenshots.py <result.xcresult> docs/screenshots
+    python3 scripts/export-screenshots.py --full <result.xcresult> docs/appstore
+
+`--full` keeps the native resolution: App Store Connect accepts only exact
+device sizes (1320 x 2868 for the 6.9" slot), so a store set must not be scaled.
 """
 
 from __future__ import annotations
@@ -33,9 +37,13 @@ def walk(node):
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    args = sys.argv[1:]
+    full = "--full" in args
+    args = [a for a in args if a != "--full"]
+    if len(args) != 2:
         raise SystemExit(__doc__)
-    bundle, out_dir = sys.argv[1], sys.argv[2]
+    bundle, out_dir = args
+    scale = 1.0 if full else SCALE
     if not os.path.exists(bundle):
         raise SystemExit(f"No result bundle at {bundle}")
 
@@ -55,11 +63,16 @@ def main() -> int:
                 continue
             source = os.path.join(staging, exported)
             target = os.path.join(out_dir, f"{name}.png")
+            if scale == 1.0:
+                shutil.copy(source, target)
+                written += 1
+                print(f"  {name}.png")
+                continue
             try:
                 from PIL import Image
 
                 image = Image.open(source)
-                image.resize((int(image.width * SCALE), int(image.height * SCALE)), Image.LANCZOS).save(target)
+                image.resize((int(image.width * scale), int(image.height * scale)), Image.LANCZOS).save(target)
             except ImportError:
                 shutil.copy(source, target)
             written += 1

@@ -27,6 +27,12 @@ struct RepoListView: View {
                         }
                     } header: {
                         VStack(alignment: .leading, spacing: 2) {
+                            if store.usingSample {
+                                Label("Sample data — not real repositories", systemImage: "sparkles")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                                    .accessibilityIdentifier("sampleBadge")
+                            }
                             Text(countSummary)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
@@ -45,6 +51,10 @@ struct RepoListView: View {
                     } actions: {
                         if store.latest.repos.isEmpty, store.hasToken {
                             Button("Read the counts now") { Task { await store.refresh(force: true) } }
+                        } else if store.latest.repos.isEmpty {
+                            Button("Add a token") { store.selectedTab = .settings }
+                            Button("See it with sample data") { store.setUsingSample(true) }
+                                .accessibilityIdentifier("trySample")
                         } else if store.changedOnly, mode == .all {
                             Button("Show all repos") { store.setChangedOnly(false) }
                         }
@@ -101,7 +111,7 @@ struct RepoListView: View {
                         systemImage: "arrow.clockwise"
                     )
                 }
-                .disabled(!store.hasToken || store.status.isBusy)
+                .disabled(!store.hasToken || store.status.isBusy || store.usingSample)
             } label: {
                 Image(systemName: "ellipsis.circle")
             }

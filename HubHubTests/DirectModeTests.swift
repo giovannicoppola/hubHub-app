@@ -639,3 +639,118 @@ final class AlfredImportTests: XCTestCase {
         XCTAssertEqual(Set(old.map { $0.prefix(7) }).count, old.count, "one point per month before the daily window")
     }
 }
+
+
+/// Sample data: what App Review sees, since it has no GitHub token to paste.
+@MainActor
+final class SampleDataTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var cacheDirectory: URL!
+    private var suiteName: String!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        FakeGitHub.reset()
+        suiteName = "hubhub.sample.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        cacheDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
+        KeychainHelper.delete(account: suiteName)
+        try? FileManager.default.removeItem(at: cacheDirectory)
+        FakeGitHub.reset()
+        try await super.tearDown()
+    }
+
+    private func makeStore() -> StatsStore {
+        StatsStore(
+            github: GitHubService(session: FakeGitHub.session()),
+            collector: StatsCollector(session: FakeGitHub.session()),
+            defaults: defaults,
+            cacheDirectory: cacheDirectory,
+            tokenAccount: suiteName
+        )
+    }
+
+    /// Every screen a reviewer can reach has something on it: rows, deltas,
+    /// the Issues tab, the "changed only" filter, and a chart.
+    func testSampleFillsEveryScreen() throws {
+        let store = makeStore()
+        store.setUsingSample(true)
+
+        XCTAssertGreaterThanOrEqual(store.latest.repos.count, 6)
+        XCTAssertFalse(store.issueQueue.isEmpty, "the Issues tab needs rows")
+        XCTAssertGreaterThan(store.changedCount, 0, "something should have moved today")
+        XCTAssertLessThan(store.changedCount, store.latest.repos.count, "and something should not have")
+        XCTAssertNotEqual(store.latest.current, store.latest.previous, "deltas need two snapshots")
+
+        let top = try XCTUnwrap(store.repos.first)
+        let points = store.series.points(repo: top.name, metric: .downloads)
+        XCTAssertGreaterThan(points.count, 100, "a chart, not a dot")
+        XCTAssertEqual(points.last?.value, top.downloads, "the chart ends on the row's count")
+    }
+
+    /// The sample repos do not exist; linking them would open a 404.
+    func testSampleReposHaveNoLinks() throws {
+        let store = makeStore()
+        store.setUsingSample(true)
+        let repo = try XCTUnwrap(store.latest.repos.first)
+        XCTAssertNil(repo.repoURL)
+        XCTAssertNil(repo.issuesURL)
+    }
+
+    /// Nothing reaches the network, and a sample never turns into history.
+    func testRefreshDoesNothingWhileShowingTheSample() async {
+        FakeGitHub.repos = [.init(name: "alpha", issues: 0, stars: 0, forks: 0, watchers: 0, assets: [])]
+        let store = makeStore()
+        store.saveToken("ghp_test")
+        store.setUsingSample(true)
+
+        await store.refresh(force: true)
+
+        XCTAssertEqual(FakeGitHub.requestCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: cacheDirectory.appendingPathComponent("history.json").path))
+    }
+
+    func testTheSampleSurvivesARelaunch() {
+        makeStore().setUsingSample(true)
+        let relaunched = makeStore()
+        XCTAssertTrue(relaunched.usingSample)
+        XCTAssertFalse(relaunched.latest.repos.isEmpty)
+    }
+
+    /// A real token means real numbers — made-up counts must not linger
+    /// under a real account.
+    func testSavingATokenTurnsTheSampleOff() {
+        let store = makeStore()
+        store.setUsingSample(true)
+        store.saveToken("ghp_test")
+
+        XCTAssertFalse(store.usingSample)
+        XCTAssertTrue(store.latest.repos.isEmpty, "the real (empty) history, not the sample")
+    }
+
+    /// First launch with no token: the empty list says what to do, and there
+    /// is no red error bar on top of it.
+    func testFirstLaunchWithoutATokenShowsNoError() async {
+        let store = makeStore()
+        await store.refresh()
+        XCTAssertEqual(store.status, .idle)
+    }
+}
+
+extension SampleDataTests {
+    /// A download count cannot go down; a sample chart that does looks broken.
+    func testSampleDownloadsNeverDecrease() {
+        let history = SampleData.history()
+        for name in Set(history.snapshots.values.flatMap(\.keys)) {
+            let values = history.dates.compactMap { history.snapshots[$0]?[name]?[Metric.downloads.rawValue] }
+            XCTAssertEqual(values, values.sorted(), "\(name) downloads went down")
+        }
+    }
+}
