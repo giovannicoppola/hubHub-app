@@ -164,8 +164,7 @@ Info.plist.
 **Uploaded 22 September 2026**: 1.0.0 (1), delivery `0bcb1fc5-2e94-4d09-85e5-2979e87d2537`.
 **Build 1 is used up**, so a resubmission needs `CURRENT_PROJECT_VERSION: "2"`.
 
-The ASC record is *hubHub — Repo Stats* (Apple ID 6815015600). The name was entered with a double
-space before the dash; fix it on the version page.
+The ASC record is *hubHub — Repo Stats* (Apple ID 6815015600).
 
 **Do not ignore the orientation warning.** "All interface orientations must be supported unless
 the app requires full screen" looks like it is only about iPad, but an iPhone-only app still runs on
