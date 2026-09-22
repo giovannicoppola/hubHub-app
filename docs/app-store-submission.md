@@ -72,9 +72,9 @@ Then:
 - **Support URL**: `https://github.com/giovannicoppola/alfred-hubHub/issues`
 - **Marketing URL**: `https://github.com/giovannicoppola/alfred-hubHub#iphone-app`
 
-**Privacy page status: not yet live.** The source is `docs/ios/privacy.html` in the public
-**alfred-hubHub** repo. That repo needs GitHub Pages turned on, serving `main` → `/docs`. Check
-that the URL returns 200 before you submit.
+**Privacy page status: live.** GitHub Pages was turned on 22 September 2026 for the public
+**alfred-hubHub** repo, serving `main` → `/docs`, and the URL returned 200. The source is
+`docs/ios/privacy.html` there. Edit and push it to change the published policy.
 
 Listing copy is in [`app-store-metadata.md`](app-store-metadata.md).
 
@@ -186,7 +186,7 @@ the script announced "Uploaded" right after a rejection.
 - [x] Privacy manifest, export compliance, and category in the bundle
 - [x] 6.9" screenshots generated (§4)
 - [x] Signed archive and export verified (§5)
-- [ ] Pages enabled on alfred-hubHub and the privacy URL returns 200 (§2)
+- [x] Pages enabled on alfred-hubHub and the privacy URL returns 200 (§2)
 - [x] App Store Connect record created (§2): Apple ID 6815015600, SKU `hubhub-ios-001`
 - [ ] App Privacy answered "No data collected" (§3)
 - [x] Build uploaded: 1.0.0 (1), 22 September 2026
