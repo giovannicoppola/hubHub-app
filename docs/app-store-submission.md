@@ -3,7 +3,7 @@
 Everything needed to take this repo from source to a review submission. Modelled on the Aeye
 runbook (`alfred-aeye/ios/docs/app-store-submission.md`), which has been through it.
 
-Current release target: **1.0.0 (build 1)**, set as `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
+Current release target: **1.0.0 (build 2)**, set as `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
 in `project.yml`.
 
 ---
@@ -162,7 +162,15 @@ Coppola (VDG762YNX9)` against *iOS Team Store Provisioning Profile: com.giovanni
 Info.plist.
 
 **Uploaded 22 September 2026**: 1.0.0 (1), delivery `0bcb1fc5-2e94-4d09-85e5-2979e87d2537`.
-**Build 1 is used up**, so a resubmission needs `CURRENT_PROJECT_VERSION: "2"`.
+**Build 1 was universal by mistake** (see below) and was replaced by **build 2**, uploaded
+23 September 2026, delivery `c4fd733f-f883-4408-a3ce-39754217acf2`. Builds 1 and 2 are both used,
+so a resubmission needs `CURRENT_PROJECT_VERSION: "3"`.
+
+**Set iPhone-only on the target, not only on the project.** XcodeGen gives an iOS application
+target `TARGETED_DEVICE_FAMILY = "1,2"`, which overrides the project-level `"1"`. Build 1 therefore
+shipped as universal, and App Store Connect required 13" iPad screenshots before review.
+`project.yml` now sets `"1"` on the `HubHub` target. To check an export, look for
+`UIDeviceFamily = [1]` in its Info.plist.
 
 The ASC record is *hubHub — Repo Stats* (Apple ID 6815015600).
 
@@ -188,7 +196,7 @@ the script announced "Uploaded" right after a rejection.
 - [x] Pages enabled on alfred-hubHub and the privacy URL returns 200 (§2)
 - [x] App Store Connect record created (§2): Apple ID 6815015600, SKU `hubhub-ios-001`
 - [ ] App Privacy answered "No data collected" (§3)
-- [x] Build uploaded: 1.0.0 (1), 22 September 2026
+- [x] Build uploaded: 1.0.0 (2), 23 September 2026 (iPhone-only; build 1 was universal)
 - [ ] Build processed and selected on the 1.0.0 version
 - [ ] Tested from TestFlight on a clean install: sample data on, then off; save a token; read
       the counts; import an Alfred history

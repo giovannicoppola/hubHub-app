@@ -16,7 +16,7 @@ settings:
     # for iPad multitasking. Face ID iPhones never rotate upside down anyway.
     INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     GENERATE_INFOPLIST_FILE: YES
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "2"
     MARKETING_VERSION: "1.0.0"
 targets:
   HubHub:
@@ -28,6 +28,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.giovannicoppola.hubhub
+        # iPhone only. It has to be set here, on the target: XcodeGen's app
+        # target defaults to "1,2" and silently beat the project-level "1",
+        # so build 1 shipped as universal and App Store Connect demanded
+        # 13" iPad screenshots.
+        TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         # HTTPS through URLSession only, which is exempt — answers export
         # compliance in the bundle so App Store Connect stops asking per upload.
