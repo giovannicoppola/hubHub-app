@@ -6,6 +6,9 @@ runbook (`alfred-aeye/ios/docs/app-store-submission.md`), which has been through
 Current release target: **1.0.0 (build 2)**, set as `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
 in `project.yml`.
 
+**Status: submitted 23 September 2026 (10:42 UTC). Waiting for Review.** Review submission
+`741a38fb-3a4a-47f1-bef8-49a0ab6bb698`.
+
 ---
 
 ## 0. The real risks
@@ -77,6 +80,38 @@ Then:
 `docs/ios/privacy.html` there. Edit and push it to change the published policy.
 
 Listing copy is in [`app-store-metadata.md`](app-store-metadata.md).
+
+### Setting it all through the API
+
+Everything in this section except App Privacy was set with the App Store Connect API, not by
+hand, and can be again:
+
+```bash
+export ASC_KEY_ID=PCLQ5K922S ASC_ISSUER_ID=...
+python3 scripts/asc_metadata.py      # text category rights age review build price availability
+python3 scripts/asc_screenshots.py   # docs/appstore/*.png -> the 6.9" slot
+```
+
+`asc_metadata.py` reads the listing from `app-store-metadata.md` and the review notes from the
+template at the end of this file, so edit those files rather than the App Store Connect fields.
+Both scripts act on whichever iOS version is still editable. Once a version is submitted it is
+locked, so they only work again when the next version exists.
+
+Two things the API cannot do:
+
+- **App Privacy** (§3): Apple offers no API for the privacy questionnaire.
+- **The first review contact.** Apple will not save review details without a `+`-prefixed phone
+  number. Either set `ASC_CONTACT_PHONE` or fill the contact in the UI once; after that the
+  script only updates the notes.
+
+App Store Connect gotchas from this run:
+
+- The ASC version was created as **1.0** while the build said **1.0.0**. A build can only be
+  selected for a version with exactly the same string, so the version was renamed through the API.
+- Apple doesn't create a price schedule or country availability for a new app. Both return 404
+  until set, and the script sets them (free; all territories and future ones).
+- App Store Connect keeps hard line breaks in review notes, so the script joins each paragraph
+  onto one line.
 
 ---
 
@@ -195,11 +230,11 @@ the script announced "Uploaded" right after a rejection.
 - [x] Signed archive and export verified (§5)
 - [x] Pages enabled on alfred-hubHub and the privacy URL returns 200 (§2)
 - [x] App Store Connect record created (§2): Apple ID 6815015600, SKU `hubhub-ios-001`
-- [ ] App Privacy answered "No data collected" (§3)
+- [x] App Privacy answered "No data collected" (§3)
 - [x] Build uploaded: 1.0.0 (2), 23 September 2026 (iPhone-only; build 1 was universal)
-- [ ] Build processed and selected on the 1.0.0 version
-- [ ] Tested from TestFlight on a clean install: sample data on, then off; save a token; read
-      the counts; import an Alfred history
+- [x] Build 2 processed and attached to 1.0.0
+- [x] Review notes, contact, and "sign-in not required" saved
+- [x] **Submitted 23 September 2026**: Waiting for Review
 - [ ] Version/build bumped for any resubmission (build numbers cannot repeat)
 
 ## Review notes template
