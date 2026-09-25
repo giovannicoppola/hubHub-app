@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>hubHub — Repo Stats</title>
+  <meta name="description" content="Track your GitHub repository stats — downloads, issues, stars, forks and watchers — on your iPhone, iPad, Mac and Apple Vision. Fully offline, your data stays yours." />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="hubHub — Repo Stats" />
+  <meta property="og:description" content="Your GitHub repo stats, right on your iPhone. Fully offline, same data as the Alfred workflow." />
+  <meta property="og:image" content="assets/app-icon.png" />
+
+  <link rel="icon" href="assets/app-icon.png" />
+
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --surface: #f5f6f8;
+      --border: #e3e5ea;
+      --text: #1c1e21;
+      --muted: #5f6672;
+      --accent: #6b4fd8;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
+      --radius: 16px;
+      --maxw: 980px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115;
+        --surface: #171a21;
+        --border: #262b36;
+        --text: #eef0f4;
+        --muted: #9aa3b2;
+        --accent: #9d86ff;
+        --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 30px rgba(0,0,0,.4);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+    header { text-align: center; padding: 72px 20px 32px; }
+    .app-icon {
+      width: 112px; height: 112px;
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+    }
+    h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 8px; letter-spacing: -0.02em; }
+    .tagline { font-size: clamp(1.05rem, 2.5vw, 1.35rem); color: var(--muted); margin: 0 auto 8px; max-width: 34ch; }
+    .subline { color: var(--muted); margin: 0 auto 28px; max-width: 46ch; }
+    .cta { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .badge img { height: 52px; display: block; }
+    .ghlink {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 18px; border: 1px solid var(--border);
+      border-radius: 12px; color: var(--text); font-weight: 600; background: var(--surface);
+    }
+    .ghlink:hover { text-decoration: none; border-color: var(--accent); }
+
+    /* Phone screenshot strip */
+    .shots {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 48px 0 8px;
+    }
+    .shots img {
+      width: 100%;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    .shots figure { margin: 0; }
+    .shots figcaption { margin-top: 8px; font-size: .82rem; color: var(--muted); text-align: center; }
+    @media (max-width: 720px) {
+      .shots { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    section { padding: 56px 0; }
+    h2 { font-size: 1.5rem; text-align: center; margin: 0 0 32px; letter-spacing: -0.01em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .card .emoji { font-size: 1.6rem; display: block; margin-bottom: 10px; }
+    .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+    .card p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+    .band { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; }
+    .band p { max-width: 52ch; margin: 0 auto; color: var(--muted); }
+    .platforms { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; list-style: none; padding: 0; }
+    .platforms li { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-size: .9rem; color: var(--muted); }
+
+    footer { text-align: center; padding: 40px 20px 64px; color: var(--muted); font-size: .9rem; }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="wrap">
+      <img class="app-icon" src="assets/app-icon.png" alt="hubHub app icon" />
+      <h1>hubHub — Repo Stats</h1>
+      <p class="tagline">Your repos&rsquo; downloads &amp; stars.</p>
+      <p class="subline">Fully offline, same data, right on your iPhone. The companion app to the <a href="https://github.com/giovannicoppola/alfred-hubHub">hubHub Alfred workflow</a>.</p>
+
+      <div class="cta">
+        <a class="badge" href="https://apps.apple.com/us/app/hubhub-repo-stats/id6815015600" aria-label="Download hubHub on the App Store">
+          <img src="assets/appstore-badge.svg" alt="Download on the App Store" />
+        </a>
+        <a class="ghlink" href="https://github.com/giovannicoppola/hubHub-app">View on GitHub</a>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="shots">
+        <figure><img src="screenshots/01-repos.png" alt="Repository list with per-metric chips and deltas" /><figcaption>All your repos</figcaption></figure>
+        <figure><img src="screenshots/02-chart-downloads.png" alt="Download history charted over four years" /><figcaption>History &amp; charts</figcaption></figure>
+        <figure><img src="screenshots/05-issues.png" alt="Repositories with open issues, most first" /><figcaption>Issues, ranked</figcaption></figure>
+        <figure><img src="screenshots/04-search.png" alt="Searching repositories with match count in the header" /><figcaption>Search</figcaption></figure>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="wrap">
+      <h2>What it does</h2>
+      <div class="grid">
+        <div class="card">
+          <span class="emoji">📊</span>
+          <h3>All your stats</h3>
+          <p>Release downloads, open issues, stars, forks and watchers — each with its change since the previous snapshot.</p>
+        </div>
+        <div class="card">
+          <span class="emoji">📥</span>
+          <h3>Accurate downloads</h3>
+          <p>Counts every asset of every release, not just the first one.</p>
+        </div>
+        <div class="card">
+          <span class="emoji">🚨</span>
+          <h3>Issues at a glance</h3>
+          <p>A dedicated tab lists the repositories with open issues, ranked by count.</p>
+        </div>
+        <div class="card">
+          <span class="emoji">📈</span>
+          <h3>History &amp; charts</h3>
+          <p>Tap any repo for its metrics charted over time, and jump straight to the repo or its issues.</p>
+        </div>
+        <div class="card">
+          <span class="emoji">🔄</span>
+          <h3>Import from Alfred</h3>
+          <p>Bring your existing download history over from the hubHub Alfred workflow.</p>
+        </div>
+        <div class="card">
+          <span class="emoji">🧪</span>
+          <h3>Try before you sign in</h3>
+          <p>A sample data mode lets you explore the app before adding your own token.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2>Your numbers stay yours</h2>
+      <p>Everything is stored on-device. Your GitHub API token lives in the iPhone Keychain — no server, no analytics, no data collection.</p>
+      <ul class="platforms">
+        <li>iPhone · iOS 17+</li>
+        <li>Mac · macOS 14+ (Apple silicon)</li>
+        <li>Apple Vision · visionOS 1+</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://apps.apple.com/us/app/hubhub-repo-stats/id6815015600">App Store</a> ·
+      <a href="https://github.com/giovannicoppola/hubHub-app">App source</a> ·
+      <a href="https://github.com/giovannicoppola/alfred-hubHub">Alfred workflow</a> ·
+      <a href="https://www.alfredforum.com">Alfred forum</a>
+    </p>
+    <p>Free · Developer Tools. Not affiliated with GitHub, Inc.</p>
+  </footer>
+
+</body>
+</html>
